@@ -272,7 +272,8 @@ static void Next_Kernel_Request()
           Cp->state = READY;
           Dispatch();
           break;
-        case NONE:
+       case NEXT:
+	     case NONE:
            /* NONE could be caused by a timer interrupt */
           Cp->state = READY;
           Dispatch();
@@ -335,11 +336,16 @@ void Task_Terminate(void) {
 }
 
 void Task_Yield(void){
-
+  if (KernelActive) {
+    Disable_Interrupt();
+    Cp ->request = NEXT;
+    Enter_Kernel();
+    Enable_Interrupt();
+  }
 };
 
-int  Task_GetArg(void){
-
+int Task_GetArg(void){
+  return Cp->argument;
 };
 
 /**
@@ -452,16 +458,13 @@ void Task_Next(){
   }
 }
 
-
 // On interrupt switch task
 ISR(TIMER1_COMPA_vect){
   if(KernelActive){
-    Task_Next();
+    Task_Yield();
     PORTB = 0x80;
   }
 }
-
-
 
 void Task2(){
   for(;;){
@@ -478,7 +481,7 @@ void Task1()
 
 void main() 
 {
-  DDRB = 0xE0;
+  DDRB = 0xF0;
   PORTB = 0x00;
 
   OS_Init();
@@ -487,13 +490,13 @@ void main()
 
   //Clear timer config.
   TCCR1A = 0;
-   
+
   //Set to CTC (mode 4)
   TCCR1B |= (1<<WGM12);
- 
+
   //Set prescaler to 256
   TCCR1B |= (1<<CS12);
- 
+
   //Set TOP value (0.01 seconds)
   OCR1A = 6250;
  
