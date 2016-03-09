@@ -4,7 +4,14 @@ LOAD=avrdude
 FLAGS=-g -Os -mmcu=atmega2560 -c
 ELFFLAGS= -g -mmcu=atmega2560 -o
 HEXFLAGS=-j .text -j .data -O ihex
+UNAME := $(shell uname)
+ifeq ($(UNAME), Linux)
 LOADFLAGS= -p m2560 -c stk500v2 -P /dev/ttyACM0 -b 115200 -U flash:w:img.hex:i -V -v -D
+endif
+ifeq ($(UNAME), Darwin)
+LOADFLAGS= -p m2560 -c stk500v2 -P /dev/cu.usbmodem1411 -b 115200 -U flash:w:img.hex:i -V -v -D
+endif
+
 
 all: clean compile elf hex load
 

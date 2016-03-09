@@ -454,7 +454,7 @@ void main()
   TCCR1B |= (1<<CS12);
  
   //Set TOP value (0.01 seconds)
-  OCR1A = 625;
+  OCR1A = 6250;
  
   //Enable interupt A for timer 3.
   TIMSK1 |= (1<<OCIE1A);
