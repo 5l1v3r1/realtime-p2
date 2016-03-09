@@ -85,6 +85,11 @@ typedef struct ProcessDescriptor
    unsigned char *sp;   /* stack pointer into the "workSpace" */
    unsigned char workSpace[WORKSPACE]; 
    PROCESS_STATES state;
+   
+   PID id;
+   PRIORITY priority;
+   int argument;
+
    voidfuncptr  code;   /* function to be executed as a task */
    KERNEL_REQUEST_TYPE request;
 } PD;
