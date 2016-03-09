@@ -137,7 +137,7 @@ volatile static unsigned int Tasks;
  * can just restore its execution context on its stack.
  * (See file "cswitch.S" for details.)
  */
-void Kernel_Create_Task_At( PD *p, voidfuncptr f ) 
+void Kernel_Create_Task_At( PD *p, void (*f)(void), PRIORITY py, int arg) 
 {   
    unsigned char *sp;
 
@@ -200,7 +200,7 @@ void Kernel_Create_Task_At( PD *p, voidfuncptr f )
 /**
   *  Create a new task
   */
-static void Kernel_Create_Task( voidfuncptr f ) 
+static void Kernel_Create_Task(void (*f)(void), PRIORITY py, int arg) 
 {
    int x;
 
@@ -212,7 +212,7 @@ static void Kernel_Create_Task( voidfuncptr f )
    }
 
    ++Tasks;
-   Kernel_Create_Task_At( &(Process[x]), f );
+   Kernel_Create_Task_At( &(Process[x]), f, py, arg);
 
 }
 
@@ -263,10 +263,9 @@ static void Next_Kernel_Request()
 
        switch(Cp->request){
        case CREATE:
-           Kernel_Create_Task( Cp->code );
+           Kernel_Create_Task(Cp->code, Cp->priority, Cp->argument);
            break;
-       case NEXT:
-	   case NONE:
+	     case NONE:
            /* NONE could be caused by a timer interrupt */
           Cp->state = READY;
           Dispatch();
@@ -310,7 +309,7 @@ PID Task_Create( void (*f)(void), PRIORITY py, int arg)
     Cp->priority = py;
     Enter_Kernel();
   } else { 
-    Kernel_Create_Task( f );
+    Kernel_Create_Task(f, py, arg);
   }
 
   return Cp->id;
@@ -336,6 +335,10 @@ int  Task_GetArg(void){
 
 };
 
+/**
+* Suspends a task until it's handle is passed to resume.
+*Does nothing if the task is already suspended
+*/
 void Task_Suspend( PID p ){
 
 };
@@ -410,6 +413,17 @@ void OS_Start(){
 }
 
 /**
+  * The calling task gives up its share of the processor voluntarily.
+  */
+void Task_Next(){
+  if (KernelActive) {
+    Disable_Interrupt();
+    Cp ->request = NEXT;
+    Enter_Kernel();
+    Enable_Interrupt();
+  }
+}
+/**
   * This function starts the RTOS after creating a few tasks.
   */
 
@@ -421,17 +435,7 @@ ISR(TIMER1_COMPA_vect){
   }
 }
 
-/**
-  * The calling task gives up its share of the processor voluntarily.
-  */
-void Task_Next(){
-  if (KernelActive) {
-    Disable_Interrupt();
-    Cp ->request = NEXT;
-    Enter_Kernel();
-    Enable_Interrupt();
-  }
-}
+
 
 void Task2(){
   for(;;){
