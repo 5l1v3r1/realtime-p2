@@ -265,6 +265,7 @@ static void Next_Kernel_Request()
        case CREATE:
            Kernel_Create_Task(Cp->code, Cp->priority, Cp->argument);
            break;
+       case NEXT:
 	     case NONE:
            /* NONE could be caused by a timer interrupt */
           Cp->state = READY;
@@ -435,8 +436,6 @@ ISR(TIMER1_COMPA_vect){
   }
 }
 
-
-
 void Task2(){
   for(;;){
     PORTB = 0x40;
@@ -452,7 +451,7 @@ void Task1()
 
 void main() 
 {
-  DDRB = 0xE0;
+  DDRB = 0xF0;
   PORTB = 0x00;
 
   OS_Init();
@@ -461,13 +460,13 @@ void main()
 
   //Clear timer config.
   TCCR1A = 0;
-   
+
   //Set to CTC (mode 4)
   TCCR1B |= (1<<WGM12);
- 
+
   //Set prescaler to 256
   TCCR1B |= (1<<CS12);
- 
+
   //Set TOP value (0.01 seconds)
   OCR1A = 6250;
  
