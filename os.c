@@ -333,7 +333,7 @@ void Task_Yield(void){
 };
 
 int  Task_GetArg(void){
-
+  return Cp->argument;
 };
 
 void Task_Suspend( PID p ){
