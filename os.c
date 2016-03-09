@@ -187,8 +187,10 @@ void Kernel_Create_Task_At( PD *p, voidfuncptr f )
    p->sp = sp;		/* stack pointer into the "workSpace" */
    p->code = f;		/* function to be executed as a task */
    p->request = NONE;
+  p->id = (PID) Tasks;
+  p->argument = arg;
+  p->priority = py;
 
-   /*----END of NEW CODE----*/
 
    p->state = READY;
 
@@ -295,8 +297,7 @@ void OS_Abort(void);
   */
 
 /**
-  * Create task with priority and argument, return the process ID
-  * TODO: RETURN THE PID
+  * Create task with given priority and argument, return the process ID
   */
 PID Task_Create( void (*f)(void), PRIORITY py, int arg)
 {
@@ -304,10 +305,15 @@ PID Task_Create( void (*f)(void), PRIORITY py, int arg)
     Disable_Interrupt();
     Cp ->request = CREATE;
     Cp->code = f;
+    Cp->id = (PID) Tasks;
+    Cp->argument = arg;
+    Cp->priority = py;
     Enter_Kernel();
   } else { 
     Kernel_Create_Task( f );
   }
+
+  return Cp->id;
 }
 
 /**
