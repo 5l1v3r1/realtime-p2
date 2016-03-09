@@ -61,7 +61,7 @@ typedef enum process_states
 { 
    DEAD = 0, 
    READY, 
-   RUNNING 
+   RUNNING,
 } PROCESS_STATES;
 
 /**
@@ -72,7 +72,8 @@ typedef enum kernel_request_type
    NONE = 0,
    CREATE,
    NEXT,
-   TERMINATE
+   TERMINATE,
+   SUSPEND
 } KERNEL_REQUEST_TYPE;
 
 /**
@@ -89,7 +90,7 @@ typedef struct ProcessDescriptor
    PID id;
    PRIORITY priority;
    int argument;
-
+   int sus = 0;
    voidfuncptr  code;   /* function to be executed as a task */
    KERNEL_REQUEST_TYPE request;
 } PD;
@@ -220,6 +221,7 @@ static void Kernel_Create_Task(void (*f)(void), PRIORITY py, int arg)
 /**
   * This internal kernel function is a part of the "scheduler". It chooses the 
   * next task to run, i.e., Cp.
+  *TO DO: check for sus flags
   */
 static void Dispatch()
 {
@@ -262,20 +264,25 @@ static void Next_Kernel_Request()
        Cp->sp = (unsigned char *) CurrentSp;
 
        switch(Cp->request){
-       case CREATE:
+        case CREATE:
            Kernel_Create_Task(Cp->code, Cp->priority, Cp->argument);
            break;
-	     case NONE:
+        case SUSPEND:
+          Cp->sus = 1;
+          Cp->state = READY;
+          Dispatch();
+          break;
+        case NONE:
            /* NONE could be caused by a timer interrupt */
           Cp->state = READY;
           Dispatch();
           break;
-       case TERMINATE:
+        case TERMINATE:
           /* deallocate all resources used by this task */
           Cp->state = DEAD;
           Dispatch();
           break;
-       default:
+        default:
           /* Houston! we have a problem here! */
           break;
        }
@@ -336,10 +343,28 @@ int  Task_GetArg(void){
 };
 
 /**
-* Suspends a task until it's handle is passed to resume.
-*Does nothing if the task is already suspended
+* Suspends a task until it's handle is passed to resume
+* Does nothing if the task is already suspended
 */
 void Task_Suspend( PID p ){
+
+  /* if the task to be suspended is currently running, then let the kernel get a new task running */
+  if(Cp->id == p && KernelActive) {
+      Disable_Interrupt();
+      Cp->request = SUSPEND;
+      Enter_Kernel();
+      Enable_Interrupt();
+  } else {
+    int x;
+    for(x=0; x < MAXPROCESS; x++) {
+      
+      if(Process[x].id == p) {
+        Process[x].sus = 1;
+      }
+
+    }
+  }
+    
 
 };
 
@@ -404,6 +429,9 @@ void OS_Init()
    }
 }
 
+/**
+  * This function starts the RTOS after creating a few tasks.
+  */
 void OS_Start(){
   if((! KernelActive) && (Tasks > 0)) {
     Disable_Interrupt();
@@ -418,14 +446,12 @@ void OS_Start(){
 void Task_Next(){
   if (KernelActive) {
     Disable_Interrupt();
-    Cp ->request = NEXT;
+    Cp->request = NEXT;
     Enter_Kernel();
     Enable_Interrupt();
   }
 }
-/**
-  * This function starts the RTOS after creating a few tasks.
-  */
+
 
 // On interrupt switch task
 ISR(TIMER1_COMPA_vect){
