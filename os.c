@@ -329,10 +329,15 @@ void Task_Terminate(void) {
 }
 
 void Task_Yield(void){
-
+  if (KernelActive) {
+    Disable_Interrupt();
+    Cp ->request = NEXT;
+    Enter_Kernel();
+    Enable_Interrupt();
+  }
 };
 
-int  Task_GetArg(void){
+int Task_GetArg(void){
   return Cp->argument;
 };
 
@@ -414,24 +419,13 @@ void OS_Start(){
 }
 
 /**
-  * The calling task gives up its share of the processor voluntarily.
-  */
-void Task_Next(){
-  if (KernelActive) {
-    Disable_Interrupt();
-    Cp ->request = NEXT;
-    Enter_Kernel();
-    Enable_Interrupt();
-  }
-}
-/**
   * This function starts the RTOS after creating a few tasks.
   */
 
 // On interrupt switch task
 ISR(TIMER1_COMPA_vect){
   if(KernelActive){
-    Task_Next();
+    Task_Yield();
     PORTB = 0x80;
   }
 }
