@@ -19,7 +19,6 @@ void Task_1()
 }
 
 ISR(TIMER1_COMPA_vect){
-	if(isActive()){
 		count++;
 		if(count == 6) {
 			Task_Suspend(2);
@@ -30,7 +29,7 @@ ISR(TIMER1_COMPA_vect){
 		}
     Task_Yield();
     PORTB = 0x80;
-  }
+
 }
 
 int main() {
