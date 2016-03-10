@@ -90,7 +90,7 @@ typedef struct ProcessDescriptor
    PID id;
    PRIORITY priority;
    int argument;
-   int sus = 0;
+   int sus;
    voidfuncptr  code;   /* function to be executed as a task */
    KERNEL_REQUEST_TYPE request;
 } PD;
@@ -315,6 +315,7 @@ PID Task_Create( void (*f)(void), PRIORITY py, int arg)
     Cp->id = (PID) Tasks;
     Cp->argument = arg;
     Cp->priority = py;
+    Cp->sus = 0;
     Enter_Kernel();
   } else { 
     Kernel_Create_Task(f, py, arg);
