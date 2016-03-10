@@ -28,5 +28,11 @@ hex: img.elf
 load:
 	$(LOAD) $(LOADFLAGS)
 
+test1: test_sus_resume.c
+	$(CC) $(FLAGS) test_sus_resume.c
+	$(CC) $(ELFFLAGS) img.elf cswitch.o os.o test_sus_resume.o
+
+test: compile test1 hex load
+
 clean:
 	rm -f *.elf *.o *.hex

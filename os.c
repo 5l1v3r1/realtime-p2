@@ -228,7 +228,7 @@ static void Dispatch()
      /* find the next READY task
        * Note: if there is no READY task, then this will loop forever!.
        */
-   while(Process[NextP].state != READY) {
+   while(Process[NextP].state != READY && Process[NextP].sus == 1) {
       NextP = (NextP + 1) % MAXPROCESS;
    }
 
@@ -367,6 +367,7 @@ void Task_Suspend( PID p ){
       
       if(Process[x].id == p) {
         Process[x].sus = 1;
+        break;
       }
 
     }
@@ -375,8 +376,19 @@ void Task_Suspend( PID p ){
 
 };
 
+/**
+* Resumes a suspended task
+* Does nothing if the task isn't suspended
+*/
 void Task_Resume( PID p ){
-
+  int x;
+  for(x=0; x < MAXPROCESS; x++) {
+    
+    if(Process[x].id == p) {
+      Process[x].sus = 0;
+      break;
+    }
+  }
 };
 
 void Task_Sleep(TICK t){
@@ -457,56 +469,4 @@ void Task_Next(){
     Enter_Kernel();
     Enable_Interrupt();
   }
-}
-
-// On interrupt switch task
-ISR(TIMER1_COMPA_vect){
-  if(KernelActive){
-    Task_Yield();
-    PORTB = 0x80;
-  }
-}
-
-void Task2(){
-  for(;;){
-    PORTB = 0x40;
-  }
-}
-
-void Task1()
-{
-  for(;;){
-    PORTB = 0x20;
-  }
-}
-
-void main() 
-{
-  DDRB = 0xF0;
-  PORTB = 0x00;
-
-  OS_Init();
-  Task_Create(Task1, 0x00, 0x00);
-  Task_Create(Task2, 0x00, 0x00);
-
-  //Clear timer config.
-  TCCR1A = 0;
-
-  //Set to CTC (mode 4)
-  TCCR1B |= (1<<WGM12);
-
-  //Set prescaler to 256
-  TCCR1B |= (1<<CS12);
-
-  //Set TOP value (0.01 seconds)
-  OCR1A = 6250;
- 
-  //Enable interupt A for timer 3.
-  TIMSK1 |= (1<<OCIE1A);
-  //Set timer to 0 (optional here).
-  TCNT1 = 0;
-
-  OS_Start();
-
-  while(1);
 }
