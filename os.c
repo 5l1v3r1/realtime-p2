@@ -246,7 +246,7 @@ static void Dispatch()
      /* find the next READY task
        * Note: if there is no READY task, then this will loop forever!.
        */
-   while(Process[NextP].state != READY && Process[NextP].sus == 1) {
+   while(Process[NextP].state != READY || Process[NextP].sus == 1) {
       NextP = (NextP + 1) % MAXPROCESS;
    }
 
@@ -394,7 +394,6 @@ void Task_Suspend( PID p ){
         Process[x].sus = 1;
         break;
       }
-
     }
   }
 };
@@ -503,7 +502,7 @@ void Task_Next(){
 }
 
 // On interrupt switch task
-/*ISR(TIMER1_COMPA_vect){
+ISR(TIMER1_COMPA_vect){
   if(KernelActive){
     Task_Yield();
     PORTB = 0x80;
@@ -553,4 +552,4 @@ void main()
   OS_Start();
 
   while(1);
-} */
+}
