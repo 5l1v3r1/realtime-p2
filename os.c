@@ -246,7 +246,7 @@ static void Dispatch()
      /* find the next READY task
        * Note: if there is no READY task, then this will loop forever!.
        */
-   while(Process[NextP].state != READY && Process[NextP].sus == 1) {
+   while(Process[NextP].state != READY || Process[NextP].sus == 1) {
       NextP = (NextP + 1) % MAXPROCESS;
    }
 
@@ -384,13 +384,14 @@ void Task_Suspend( PID p ){
   if(Cp->id == p && KernelActive) {
       Disable_Interrupt();
       Cp->request = SUSPEND;
+
       Enter_Kernel();
       Enable_Interrupt();
   } else {
     int x;
     for(x=0; x < MAXPROCESS; x++) {
-      
       if(Process[x].id == p) {
+        PORTB = 0x40;
         Process[x].sus = 1;
         break;
       }
@@ -500,6 +501,10 @@ void Task_Next(){
     Enter_Kernel();
     Enable_Interrupt();
   }
+}
+
+int isActive() {
+  return KernelActive;
 }
 
 // On interrupt switch task

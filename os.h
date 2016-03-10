@@ -39,4 +39,6 @@ EVENT Event_Init(void);
 void Event_Wait(EVENT e);
 void Event_Signal(EVENT e);
 
+int isActive(void);
+
 #endif /* _OS_H_ */
