@@ -395,7 +395,6 @@ void Task_Suspend( PID p ){
         Process[x].sus = 1;
         break;
       }
-
     }
   }
 };
@@ -508,7 +507,7 @@ int isActive() {
 }
 
 // On interrupt switch task
-/*ISR(TIMER1_COMPA_vect){
+ISR(TIMER1_COMPA_vect){
   if(KernelActive){
     Task_Yield();
     PORTB = 0x80;
@@ -558,4 +557,4 @@ void main()
   OS_Start();
 
   while(1);
-} */
+}
