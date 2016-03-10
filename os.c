@@ -73,7 +73,8 @@ typedef enum kernel_request_type
    CREATE,
    NEXT,
    TERMINATE,
-   SUSPEND
+   SUSPEND,
+   SLEEP
 } KERNEL_REQUEST_TYPE;
 
 /**
@@ -91,9 +92,26 @@ typedef struct ProcessDescriptor
    PRIORITY priority;
    int argument;
    int sus;
+   TICK sleep_time;
    voidfuncptr  code;   /* function to be executed as a task */
    KERNEL_REQUEST_TYPE request;
 } PD;
+
+/*
+ * Sleep queue structure
+ */
+
+struct sleep_node {
+  TICK t;
+  PD* pd; 
+  struct node *next;
+};
+
+struct sleep_node *sleep_queue;
+
+void sleep_queue_add(){
+
+}
 
 /**
   * This table contains ALL process descriptors. It doesn't matter what
@@ -185,8 +203,8 @@ void Kernel_Create_Task_At( PD *p, void (*f)(void), PRIORITY py, int arg)
    sp = sp - 33;
 #endif
       
-   p->sp = sp;		/* stack pointer into the "workSpace" */
-   p->code = f;		/* function to be executed as a task */
+   p->sp = sp;    /* stack pointer into the "workSpace" */
+   p->code = f;   /* function to be executed as a task */
    p->request = NONE;
   p->id = (PID) Tasks;
   p->argument = arg;
@@ -247,8 +265,7 @@ static void Dispatch()
   *
   * This is the main loop of our kernel, called by OS_Start().
   */
-static void Next_Kernel_Request() 
-{
+static void Next_Kernel_Request() {
    Dispatch();  /* select a new task to run */
 
    while(1) {
@@ -272,8 +289,15 @@ static void Next_Kernel_Request()
           Cp->state = READY;
           Dispatch();
           break;
+       case SLEEP:
+          PORTB = 0xF0;
+          Cp->sus = 1;
+          Cp->state = READY;
+          sleep_queue_add();
+          Dispatch();
+          break;
        case NEXT:
-	     case NONE:
+       case NONE:
            /* NONE could be caused by a timer interrupt */
           Cp->state = READY;
           Dispatch();
@@ -289,6 +313,7 @@ static void Next_Kernel_Request()
        }
     } 
 }
+
 
 
 /*================
@@ -372,8 +397,6 @@ void Task_Suspend( PID p ){
 
     }
   }
-    
-
 };
 
 /**
@@ -391,8 +414,16 @@ void Task_Resume( PID p ){
   }
 };
 
-void Task_Sleep(TICK t){
+/*
+ * Sleep for t*0.01 seconds
+ */
 
+void Task_Sleep(TICK t){
+  Disable_Interrupt();
+  Cp->request = SLEEP;
+  Cp->sleep_time = t;
+  Enter_Kernel();
+  Enable_Interrupt();
 };
 
 /*================
@@ -470,3 +501,56 @@ void Task_Next(){
     Enable_Interrupt();
   }
 }
+
+// On interrupt switch task
+/*ISR(TIMER1_COMPA_vect){
+  if(KernelActive){
+    Task_Yield();
+    PORTB = 0x80;
+  }
+}
+
+void Task2(){
+  for(;;){
+    PORTB = 0x40;
+  }
+}
+
+void Task1()
+{
+  for(;;){
+    PORTB = 0x20;
+  }
+}
+
+void main() 
+{
+  DDRB = 0xF0;
+  PORTB = 0x00;
+
+  OS_Init();
+  Task_Create(Task1, 0x00, 0x00);
+  Task_Create(Task2, 0x00, 0x00);
+
+  //Clear timer config.
+  TCCR1A = 0;
+
+  //Set to CTC (mode 4)
+  TCCR1B |= (1<<WGM12);
+
+  //Set prescaler to 256
+  TCCR1B |= (1<<CS12);
+
+  //Set TOP value (0.01 seconds)
+  OCR1A = 6250;
+ 
+  //Enable interupt A for timer 3.
+  TIMSK1 |= (1<<OCIE1A);
+  
+  //Set timer to 0 (optional here).
+  TCNT1 = 0;
+
+  OS_Start();
+
+  while(1);
+} */
