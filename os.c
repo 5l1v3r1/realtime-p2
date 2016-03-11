@@ -1,7 +1,9 @@
 #include <string.h>
+#include <stdlib.h>
 #include "os.h"
 #include <avr/io.h>
 #include <avr/interrupt.h>
+#define F_CPU 16000000UL
 #include <util/delay.h>
 
 //Comment out the following line to remove debugging code from compiled version.
@@ -11,6 +13,17 @@ typedef void (*voidfuncptr) (void);      /* pointer to void f(void) */
 
 #define WORKSPACE     256
 #define MAXPROCESS   4
+
+void debug_flash(){
+  PORTB = 0x60;
+  _delay_ms(250);
+  PORTB = 0x00;
+  _delay_ms(250);
+  PORTB = 0x60;
+  _delay_ms(250);
+  PORTB = 0x00;
+  _delay_ms(250);
+}
 
 /*===========
   * RTOS Internal
@@ -97,20 +110,43 @@ typedef struct ProcessDescriptor
    KERNEL_REQUEST_TYPE request;
 } PD;
 
-/*
- * Sleep queue structure
- */
+/**
+  * This table contains ALL process descriptors. It doesn't matter what
+  * state a task is in.
+  */
 
 struct sleep_node {
   TICK t;
   PD* pd; 
-  struct node *next;
+  struct sleep_node *next;
 };
 
-struct sleep_node *sleep_queue;
+struct sleep_node *sleep_queue_head = NULL;
 
-void sleep_queue_add(){
+ISR(TIMER1_COMPA_vect){
+  Task_Resume(sleep_queue_head->pd->id);
+  sleep_queue_head = sleep_queue_head->next;
+}
 
+void enter_sleep_queue(){
+  struct sleep_node *new_sleep_node = (struct sleep_node *) malloc( sizeof(struct sleep_node) ); 
+
+  //Clear timer config.
+  TCCR1A = 0;
+
+  //Set to CTC (mode 4)
+  TCCR1B |= (1<<WGM12);
+
+  //Set prescaler to 256
+  TCCR1B |= (1<<CS12);
+
+  //Set TOP value (0.01 seconds)
+  OCR1A = 6250;
+ 
+  //Enable interupt A for timer 3.
+  TIMSK1 |= (1<<OCIE1A);
+  //Set timer to 0 (optional here).
+  TCNT1 = 0;
 }
 
 /**
@@ -118,6 +154,8 @@ void sleep_queue_add(){
   * state a task is in.
   */
 static PD Process[MAXPROCESS];
+
+
 
 /**
   * The process descriptor of the currently RUNNING task.
@@ -293,7 +331,7 @@ static void Next_Kernel_Request() {
           PORTB = 0xF0;
           Cp->sus = 1;
           Cp->state = READY;
-          sleep_queue_add();
+          enter_sleep_queue();
           Dispatch();
           break;
        case NEXT:
@@ -483,6 +521,7 @@ void OS_Init()
   * This function starts the RTOS after creating a few tasks.
   */
 void OS_Start(){
+  debug_flash();
   if((! KernelActive) && (Tasks > 0)) {
     Disable_Interrupt();
     KernelActive = 1;
@@ -504,57 +543,4 @@ void Task_Next(){
 
 int isActive() {
   return KernelActive;
-}
-
-// On interrupt switch task
-ISR(TIMER1_COMPA_vect){
-  if(KernelActive){
-    Task_Yield();
-    PORTB = 0x80;
-  }
-}
-
-void Task2(){
-  for(;;){
-    PORTB = 0x40;
-  }
-}
-
-void Task1()
-{
-  for(;;){
-    PORTB = 0x20;
-  }
-}
-
-void main() 
-{
-  DDRB = 0xF0;
-  PORTB = 0x00;
-
-  OS_Init();
-  Task_Create(Task1, 0x00, 0x00);
-  Task_Create(Task2, 0x00, 0x00);
-
-  //Clear timer config.
-  TCCR1A = 0;
-
-  //Set to CTC (mode 4)
-  TCCR1B |= (1<<WGM12);
-
-  //Set prescaler to 256
-  TCCR1B |= (1<<CS12);
-
-  //Set TOP value (0.01 seconds)
-  OCR1A = 6250;
- 
-  //Enable interupt A for timer 3.
-  TIMSK1 |= (1<<OCIE1A);
-  
-  //Set timer to 0 (optional here).
-  TCNT1 = 0;
-
-  OS_Start();
-
-  while(1);
 }
