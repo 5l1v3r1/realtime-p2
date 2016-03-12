@@ -16,14 +16,15 @@ typedef void (*voidfuncptr) (void);      /* pointer to void f(void) */
 
 void debug_flash(){
   PORTB = 0x60;
-  _delay_ms(250);
+  _delay_ms(500);
   PORTB = 0x00;
-  _delay_ms(250);
+  _delay_ms(500);
   PORTB = 0x60;
-  _delay_ms(250);
+  _delay_ms(500);
   PORTB = 0x00;
-  _delay_ms(250);
+  _delay_ms(500);
 }
+
 
 /*===========
   * RTOS Internal
@@ -49,6 +50,7 @@ extern void Exit_Kernel();    /* this is the same as CSwitch() */
 
 /* Prototype */
 void Task_Terminate(void);
+void enter_sleep_queue();
 
 /** 
   * This external function could be implemented in two ways:
@@ -106,48 +108,11 @@ typedef struct ProcessDescriptor
    int argument;
    int sus;
    TICK sleep_time;
+
    voidfuncptr  code;   /* function to be executed as a task */
    KERNEL_REQUEST_TYPE request;
 } PD;
 
-/**
-  * This table contains ALL process descriptors. It doesn't matter what
-  * state a task is in.
-  */
-
-struct sleep_node {
-  TICK t;
-  PD* pd; 
-  struct sleep_node *next;
-};
-
-struct sleep_node *sleep_queue_head = NULL;
-
-ISR(TIMER1_COMPA_vect){
-  Task_Resume(sleep_queue_head->pd->id);
-  sleep_queue_head = sleep_queue_head->next;
-}
-
-void enter_sleep_queue(){
-  struct sleep_node *new_sleep_node = (struct sleep_node *) malloc( sizeof(struct sleep_node) ); 
-
-  //Clear timer config.
-  TCCR1A = 0;
-
-  //Set to CTC (mode 4)
-  TCCR1B |= (1<<WGM12);
-
-  //Set prescaler to 256
-  TCCR1B |= (1<<CS12);
-
-  //Set TOP value (0.01 seconds)
-  OCR1A = 6250;
- 
-  //Enable interupt A for timer 3.
-  TIMSK1 |= (1<<OCIE1A);
-  //Set timer to 0 (optional here).
-  TCNT1 = 0;
-}
 
 /**
   * This table contains ALL process descriptors. It doesn't matter what
@@ -238,7 +203,7 @@ void Kernel_Create_Task_At( PD *p, void (*f)(void), PRIORITY py, int arg)
    }
 #else
    //Place stack pointer at top of stack
-   sp = sp - 33;
+   sp = sp - 34;
 #endif
       
    p->sp = sp;    /* stack pointer into the "workSpace" */
@@ -307,6 +272,7 @@ static void Next_Kernel_Request() {
    Dispatch();  /* select a new task to run */
 
    while(1) {
+
        Cp->request = NONE; /* clear its request */
 
        /* activate this newly selected task */
@@ -324,14 +290,19 @@ static void Next_Kernel_Request() {
            break;
         case SUSPEND:
           Cp->sus = 1;
-          Cp->state = READY;
+          if(Cp->state == RUNNING){
+            Cp->state = READY;
+          }
           Dispatch();
           break;
        case SLEEP:
-          PORTB = 0xF0;
           Cp->sus = 1;
-          Cp->state = READY;
+          if(Cp->state == RUNNING){
+            Cp->state = READY;
+          }
+          
           enter_sleep_queue();
+
           Dispatch();
           break;
        case NEXT:
@@ -369,8 +340,7 @@ void OS_Abort(void);
 /**
   * Create task with given priority and argument, return the process ID
   */
-PID Task_Create( void (*f)(void), PRIORITY py, int arg)
-{
+PID Task_Create( void (*f)(void), PRIORITY py, int arg){
   if (KernelActive ) {
     Disable_Interrupt();
     Cp ->request = CREATE;
@@ -417,19 +387,16 @@ int Task_GetArg(void){
 * Does nothing if the task is already suspended
 */
 void Task_Suspend( PID p ){
-
   /* if the task to be suspended is currently running, then let the kernel get a new task running */
   if(Cp->id == p && KernelActive) {
       Disable_Interrupt();
       Cp->request = SUSPEND;
-
       Enter_Kernel();
       Enable_Interrupt();
   } else {
     int x;
     for(x=0; x < MAXPROCESS; x++) {
       if(Process[x].id == p) {
-        PORTB = 0x40;
         Process[x].sus = 1;
         break;
       }
@@ -444,7 +411,6 @@ void Task_Suspend( PID p ){
 void Task_Resume( PID p ){
   int x;
   for(x=0; x < MAXPROCESS; x++) {
-    
     if(Process[x].id == p) {
       Process[x].sus = 0;
       break;
@@ -452,9 +418,39 @@ void Task_Resume( PID p ){
   }
 };
 
-/*
- * Sleep for t*0.01 seconds
+/* Sleep code
+ *
  */
+
+struct sleep_node {
+  PD* pd;
+  int sleep_expected_count;
+  int sleep_actual_count;
+  struct sleep_node *next;
+};
+
+struct sleep_node *sleep_queue_head = NULL;
+
+void sleep_delete(PID id){
+  struct sleep_node *temp, *prev;
+  
+  temp=sleep_queue_head;
+  
+  while(temp!=NULL){
+    if(temp->pd->id==id){
+      if(temp==sleep_queue_head){
+        sleep_queue_head=temp->next;
+        free(temp);
+      }else{
+        prev->next=temp->next;
+        free(temp);
+      }
+    }else{
+      prev=temp;
+      temp= temp->next;
+    }
+  }
+}
 
 void Task_Sleep(TICK t){
   Disable_Interrupt();
@@ -463,6 +459,56 @@ void Task_Sleep(TICK t){
   Enter_Kernel();
   Enable_Interrupt();
 };
+
+ISR(TIMER1_COMPA_vect){
+  struct sleep_node *curr_sleep_node = sleep_queue_head;
+  struct sleep_node *next_sleep_node = curr_sleep_node->next;
+
+  while(curr_sleep_node != NULL){
+    curr_sleep_node->sleep_actual_count++;
+
+    if(curr_sleep_node->sleep_actual_count >= curr_sleep_node->sleep_expected_count){
+      Task_Resume(curr_sleep_node->pd->id);
+      sleep_delete(curr_sleep_node->pd->id);
+    }
+
+    curr_sleep_node = next_sleep_node;
+  }
+
+  if(sleep_queue_head == NULL){
+    TIMSK1  = 0;
+  }else{
+    TCNT1   = 0;
+  }
+}
+
+void enter_sleep_queue(){
+  struct sleep_node *new_sleep_node = (struct sleep_node *) malloc(sizeof(struct sleep_node)); 
+
+  new_sleep_node->pd = (PD*) Cp;
+  new_sleep_node->next = sleep_queue_head;
+  new_sleep_node->sleep_actual_count = 0;
+  new_sleep_node->sleep_expected_count = (int)(Cp->sleep_time/MSECPERTICK); 
+  sleep_queue_head = new_sleep_node;
+
+  // Control registers
+  TCCR1A  = 0;
+
+  // Configure timer 1 for CTC mode
+  TCCR1B  |= (1<<WGM12); 
+  
+  // start timer
+  TIMSK1   |= (1<<OCIE1A);
+
+  //Output compare register, interrupt every 1 millisecond
+  OCR1A   = 625;
+
+  // Configure with 256 prescaler
+  TCCR1B  |= (1<<CS12);
+
+  //Start count to 0
+  TCNT1   = 0;
+}
 
 /*================
   * MUTEX FUNCTIONS
@@ -500,47 +546,28 @@ void Event_Signal(EVENT e){
 
 
 /**
-  * This function initializes the RTOS and must be called before any other
-  * system calls.
-  */
-void OS_Init() 
-{
-   int x;
-
-   Tasks = 0;
-   KernelActive = 0;
-   NextP = 0;
-	//Reminder: Clear the memory for the task on creation.
-   for (x = 0; x < MAXPROCESS; x++) {
-      memset(&(Process[x]),0,sizeof(PD));
-      Process[x].state = DEAD;
-   }
+* This function initializes the RTOS and must be called before any other
+* system calls.
+*/
+void OS_Init() {
+  int x;
+  Tasks = 0;
+  KernelActive = 0;
+  NextP = 0;
+  //Reminder: Clear the memory for the task on creation.
+  for (x = 0; x < MAXPROCESS; x++) {
+    memset(&(Process[x]),0,sizeof(PD));
+    Process[x].state = DEAD;
+  }
 }
 
 /**
-  * This function starts the RTOS after creating a few tasks.
-  */
+* This function starts the RTOS after creating a few tasks.
+*/
 void OS_Start(){
-  debug_flash();
   if((! KernelActive) && (Tasks > 0)) {
     Disable_Interrupt();
     KernelActive = 1;
     Next_Kernel_Request();
   }
-}
-
-/**
-  * The calling task gives up its share of the processor voluntarily.
-  */
-void Task_Next(){
-  if (KernelActive) {
-    Disable_Interrupt();
-    Cp->request = NEXT;
-    Enter_Kernel();
-    Enable_Interrupt();
-  }
-}
-
-int isActive() {
-  return KernelActive;
 }

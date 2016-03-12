@@ -1,0 +1,44 @@
+#include "os.h"
+#include <avr/io.h>
+#include <avr/interrupt.h>
+
+#define F_CPU 16000000UL
+#include <util/delay.h>
+
+void Task_3(){
+  for(;;){
+    PORTB = 0x80;
+    _delay_ms(50);
+    Task_Yield();
+  }
+}
+
+void Task_2(){
+  for(;;){
+    PORTB = 0x20;
+    _delay_ms(50);
+    Task_Yield();
+  }
+}
+
+void Task_1(){
+  for(;;){
+    Task_Sleep(3000);
+
+    PORTB = 0x40;
+    _delay_ms(50);
+
+    Task_Yield();
+  }
+}
+
+int main() {
+	DDRB = 0xF0;
+	PORTB = 0x00;
+
+  OS_Init();
+  Task_Create(Task_1, 0x00, 0x00);
+  Task_Create(Task_2, 0x00, 0x00);
+  Task_Create(Task_3, 0x00, 0x00);
+  OS_Start();
+}
