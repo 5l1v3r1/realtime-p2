@@ -19,10 +19,6 @@ void debug_flash(){
   _delay_ms(500);
   PORTB = 0x00;
   _delay_ms(500);
-  PORTB = 0x60;
-  _delay_ms(500);
-  PORTB = 0x00;
-  _delay_ms(500);
 }
 
 
@@ -75,6 +71,7 @@ extern void Enter_Kernel();
 typedef enum process_states 
 { 
    DEAD = 0, 
+   BLOCKED,
    READY, 
    RUNNING,
 } PROCESS_STATES;
@@ -89,7 +86,10 @@ typedef enum kernel_request_type
    NEXT,
    TERMINATE,
    SUSPEND,
-   SLEEP
+   SLEEP,
+   CREATE_MUTEX,
+   LOCK_MUTEX,
+   UNLOCK_MUTEX
 } KERNEL_REQUEST_TYPE;
 
 /**
@@ -104,6 +104,7 @@ typedef struct ProcessDescriptor
    PROCESS_STATES state;
    
    PID id;
+   MUTEX mid;
    PRIORITY priority;
    int argument;
    int sus;
@@ -119,8 +120,6 @@ typedef struct ProcessDescriptor
   * state a task is in.
   */
 static PD Process[MAXPROCESS];
-
-
 
 /**
   * The process descriptor of the currently RUNNING task.
@@ -149,6 +148,68 @@ volatile static unsigned int NextP;
 
 /** 1 if kernel has been started; 0 otherwise. */
 volatile static unsigned int KernelActive;  
+
+/**
+  *  This is the set of states that a Mutex can be in at any given time.
+  */
+typedef enum mutex_states { 
+   LOCKED = 0, 
+   UNLOCKED
+} MUTEX_STATES;
+
+/**
+  * Each Mutex is represented by a mutex descriptor, which contains all
+  * relevant information about this mutex.
+  */
+typedef struct MutexDescriptor {
+    MUTEX_STATES state;   
+    MUTEX id;
+    PID owner_id;
+    PRIORITY owner_priority;
+    unsigned int lock_count;
+    struct mutex_node *wait_queue;
+} MD;
+
+static MD Mutex[MAXMUTEX];
+
+/** number of mutexes created so far */
+volatile static unsigned int Mutexes;  
+
+
+/**
+  *  Node for blocked queue for mutex
+  */
+struct mutex_node{
+  PD* pd;
+  struct mutex_node *next;
+};
+
+
+void Kernel_Create_Mutex(PID owner_id, PRIORITY priority){
+  Mutex[Mutexes].state = UNLOCKED;
+  Mutex[Mutexes].id = Mutexes;
+  Mutex[Mutexes].owner_id = owner_id;
+  Mutex[Mutexes].owner_priority = priority;
+  Mutex[Mutexes].lock_count = 0;
+  Mutex[Mutexes].wait_queue = NULL;
+};
+
+
+void Kernel_Lock_Mutex(MUTEX mid){
+  if(!Mutex[mid].lock_count){
+    Mutex[mid].state = LOCKED;
+  }
+  Mutex[mid].lock_count++;
+};
+
+
+void Kernel_Unlock_Mutex(MUTEX mid){
+  Mutex[mid].lock_count--;
+  if(!Mutex[mid].lock_count){
+    Mutex[mid].state = UNLOCKED;
+  }
+};
+
 
 /** number of tasks created so far */
 volatile static unsigned int Tasks;  
@@ -273,59 +334,66 @@ static void Dispatch(){
   * This is the main loop of our kernel, called by OS_Start().
   */
 static void Next_Kernel_Request() {
-   Dispatch();  /* select a new task to run */
+  Dispatch();  /* select a new task to run */
 
-   while(1) {
+  while(1) {
 
-       Cp->request = NONE; /* clear its request */
+    Cp->request = NONE; /* clear its request */
 
-       /* activate this newly selected task */
-       CurrentSp = Cp->sp;
-       Exit_Kernel();    /* or CSwitch() */
+    /* activate this newly selected task */
+    CurrentSp = Cp->sp;
+    Exit_Kernel();    /* or CSwitch() */
 
-       /* if this task makes a system call, it will return to here! */
+    /* if this task makes a system call, it will return to here! */
 
-        /* save the Cp's stack pointer */
-       Cp->sp = (unsigned char *) CurrentSp;
+    /* save the Cp's stack pointer */
+    Cp->sp = (unsigned char *) CurrentSp;
 
-       switch(Cp->request){
-        case CREATE:
-           Kernel_Create_Task(Cp->code, Cp->priority, Cp->argument);
-           break;
-        case SUSPEND:
-          Cp->sus = 1;
-          if(Cp->state == RUNNING){
-            Cp->state = READY;
-          }
-          Dispatch();
-          break;
-       case SLEEP:
-          Cp->sus = 1;
-          if(Cp->state == RUNNING){
-            Cp->state = READY;
-          }
-          
-          enter_sleep_queue();
-
-          Dispatch();
-          break;
-       case NEXT:
-       case NONE:
-           /* NONE could be caused by a timer interrupt */
+    switch(Cp->request){
+      case CREATE:
+        Kernel_Create_Task(Cp->code, Cp->priority, Cp->argument);
+        break;
+      case SUSPEND:
+        Cp->sus = 1;
+        if(Cp->state == RUNNING){
           Cp->state = READY;
-          Dispatch();
-          break;
-        case TERMINATE:
-          /* deallocate all resources used by this task */
-          --Tasks;
-          Cp->state = DEAD;
-          Dispatch();
-          break;
-        default:
-          /* Houston! we have a problem here! */
-          break;
-       }
-    } 
+        }
+        Dispatch();
+        break;
+      case SLEEP:
+        Cp->sus = 1;
+        if(Cp->state == RUNNING){
+          Cp->state = READY;
+        }
+        enter_sleep_queue();
+        Dispatch();
+      break;
+      case NEXT:
+      case NONE:
+      /* NONE could be caused by a timer interrupt */
+        Cp->state = READY;
+        Dispatch();
+        break;
+      case TERMINATE:
+        /* deallocate all resources used by this task */
+        --Tasks;
+        Cp->state = DEAD;
+        Dispatch();
+        break;
+      case CREATE_MUTEX:
+        Kernel_Create_Mutex(Cp->id, Cp->priority);
+        break;
+      case LOCK_MUTEX:
+        Kernel_Lock_Mutex(Cp->mid);
+        break;
+      case UNLOCK_MUTEX:
+        Kernel_Unlock_Mutex(Cp->mid);
+        break;
+      default:
+        /* Houston! we have a problem here! */
+        break;
+    }
+  } 
 }
 
 
@@ -338,7 +406,7 @@ static void Next_Kernel_Request() {
 void OS_Abort(void);
 
 /*================
-  * TASK FUCNTIONS
+  *  FUCNTIONS
   *================
   */
 
@@ -437,9 +505,10 @@ struct sleep_node {
 struct sleep_node *sleep_queue_head = NULL;
 
 void sleep_delete(PID id){
+
   struct sleep_node *temp, *prev;
   
-  temp=sleep_queue_head;
+  temp = sleep_queue_head;
   
   while(temp!=NULL){
     if(temp->pd->id==id){
@@ -451,8 +520,8 @@ void sleep_delete(PID id){
         free(temp);
       }
     }else{
-      prev=temp;
-      temp= temp->next;
+      prev = temp;
+      temp = temp->next;
     }
   }
 }
@@ -470,6 +539,7 @@ ISR(TIMER1_COMPA_vect){
   struct sleep_node *next_sleep_node = curr_sleep_node->next;
 
   while(curr_sleep_node != NULL){
+    
     curr_sleep_node->sleep_actual_count++;
 
     if(curr_sleep_node->sleep_actual_count >= curr_sleep_node->sleep_expected_count){
@@ -488,6 +558,7 @@ ISR(TIMER1_COMPA_vect){
 }
 
 void enter_sleep_queue(){
+
   struct sleep_node *new_sleep_node = (struct sleep_node *) malloc(sizeof(struct sleep_node)); 
 
   new_sleep_node->pd = (PD*) Cp;
@@ -520,8 +591,13 @@ void enter_sleep_queue(){
   *================
   */
 
-MUTEX Mutex_Init(void){
 
+
+MUTEX Mutex_Init(void){
+  Disable_Interrupt();
+  Cp->request = CREATE_MUTEX;
+  Enter_Kernel();
+  return (MUTEX)Mutexes++;
 };
 
 void Mutex_Lock(MUTEX m){
@@ -531,6 +607,8 @@ void Mutex_Lock(MUTEX m){
 void Mutex_Unlock(MUTEX m){
 
 };
+
+
 
 /*================
   * EVENT FUNCTIONS
@@ -557,12 +635,20 @@ void Event_Signal(EVENT e){
 void OS_Init() {
   int x;
   Tasks = 0;
+  Mutexes = 0;
   KernelActive = 0;
   NextP = 0;
+
   //Reminder: Clear the memory for the task on creation.
   for (x = 0; x < MAXPROCESS; x++) {
     memset(&(Process[x]),0,sizeof(PD));
     Process[x].state = DEAD;
+  }
+
+  //Reminder: Clear the memory for the m on creation.
+  for (x = 0; x < MAXMUTEX; x++) {
+    memset(&(Mutex[x]),0,sizeof(MD));
+    Mutex[x].state = UNLOCKED;
   }
 }
 

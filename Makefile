@@ -40,7 +40,11 @@ test_pre_empt: test_pre_empt.c
 	$(CC) $(FLAGS) test_pre_empt.c
 	$(CC) $(ELFFLAGS) img.elf cswitch.o os.o test_pre_empt.o
 
-test: compile test_pre_empt hex load
+test_mutex: test_mutex.c
+	$(CC) $(FLAGS) test_mutex.c
+	$(CC) $(ELFFLAGS) img.elf cswitch.o os.o test_mutex.o
+
+test: compile test_sleep hex load
 
 clean:
 	rm -f *.elf *.o *.hex
