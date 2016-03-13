@@ -188,27 +188,60 @@ struct mutex_node{
 void Kernel_Create_Mutex(PID owner_id, PRIORITY priority){
   Mutex[Mutexes].state = UNLOCKED;
   Mutex[Mutexes].id = Mutexes;
-  Mutex[Mutexes].owner_id = owner_id;
+  Mutex[Mutexes].owner_id;
   Mutex[Mutexes].owner_priority = priority;
   Mutex[Mutexes].lock_count = 0;
   Mutex[Mutexes].wait_queue = NULL;
 };
 
 
-void Kernel_Lock_Mutex(MUTEX mid){
-  if(!Mutex[mid].lock_count){
+void Kernel_Lock_Mutex(MUTEX mid, PID id){
+  if(Mutex[mid].state == UNLOCKED || id == Mutex[mid].owner_id){  
+    Mutex[mid].owner_id = id;
+    Mutex[mid].lock_count++;
     Mutex[mid].state = LOCKED;
+  }else{
+    Process[id].state = BLOCKED;
+
+    struct mutex_node *new_mutex_node = (struct mutex_node *) malloc(sizeof(struct mutex_node)); 
+
+    new_mutex_node->pd = (PD*) &(Process[id]);
+    new_mutex_node->next = Mutex[mid].wait_queue;
+    Mutex[mid].wait_queue = new_mutex_node;
   }
-  Mutex[mid].lock_count++;
 };
 
+void Pass_Mutex(MUTEX mid){
+  struct mutex_node *curr_mutex_node = Mutex[mid].wait_queue;
+  struct mutex_node *next_mutex_node;
+  PID next_task_id = curr_mutex_node->pd->id;
 
-void Kernel_Unlock_Mutex(MUTEX mid){
-  Mutex[mid].lock_count--;
-  if(!Mutex[mid].lock_count){
-    Mutex[mid].state = UNLOCKED;
+  while(curr_mutex_node != NULL){
+    next_mutex_node = curr_mutex_node->next;
+    
+    if(Process[next_task_id].priority > curr_mutex_node->pd->priority){
+      next_task_id = curr_mutex_node->pd->id; 
+    }
+
+    curr_mutex_node = next_mutex_node;
+  }
+
+  Kernel_Lock_Mutex(mid, next_task_id);
+}
+
+
+void Kernel_Unlock_Mutex(MUTEX mid, PID id){
+  if(Mutex[mid].state == LOCKED && id == Mutex[mid].owner_id){
+    Mutex[mid].lock_count--;  
+    if(!Mutex[mid].lock_count){
+      Mutex[mid].state = UNLOCKED;
+      if(Mutex[mid].wait_queue != NULL){
+        Pass_Mutex(mid);
+      }
+    }
   }
 };
+
 
 
 /** number of tasks created so far */
@@ -384,10 +417,10 @@ static void Next_Kernel_Request() {
         Kernel_Create_Mutex(Cp->id, Cp->priority);
         break;
       case LOCK_MUTEX:
-        Kernel_Lock_Mutex(Cp->mid);
+        Kernel_Lock_Mutex(Cp->mid, Cp->id);
         break;
       case UNLOCK_MUTEX:
-        Kernel_Unlock_Mutex(Cp->mid);
+        Kernel_Unlock_Mutex(Cp->mid, Cp->id);
         break;
       default:
         /* Houston! we have a problem here! */
@@ -602,11 +635,17 @@ MUTEX Mutex_Init(void){
 };
 
 void Mutex_Lock(MUTEX m){
-
+  Disable_Interrupt();
+  Cp->request = LOCK_MUTEX;
+  Cp->mid = m;
+  Enter_Kernel();
 };
 
 void Mutex_Unlock(MUTEX m){
-
+  Disable_Interrupt();
+  Cp->request = UNLOCK_MUTEX;
+  Cp->mid = m;
+  Enter_Kernel();
 };
 
 

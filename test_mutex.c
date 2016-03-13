@@ -16,9 +16,10 @@ void Task_1(){
   MUTEX m = Mutex_Init();
   PORTB = 0x10;
   _delay_ms(500);
-  if(m == 0){
-    Task_Create(Task_2, 0, 0); // Pin 12
-  }
+  Mutex_Lock(m);
+  _delay_ms(5000);
+  Mutex_Unlock(m);
+  PORTB = 0x00;
 }
 
 int main() {
@@ -27,5 +28,6 @@ int main() {
 
   OS_Init();
   Task_Create(Task_1, 0, 0); // Pin 12
+  Task_Create(Task_2, 0, 0); // Pin 12
   OS_Start();
 }
