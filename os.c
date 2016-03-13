@@ -153,6 +153,31 @@ volatile static unsigned int NextP;
 /** 1 if kernel has been started; 0 otherwise. */
 volatile static unsigned int KernelActive;  
 
+/*
+  * This internal kernel function is a part of the "scheduler". It chooses the 
+  * next task to run, i.e., Cp.
+  */
+static void Dispatch(){
+  PRIORITY high_priority = 10;
+
+  int i;
+  for(i = 0; i < MAXPROCESS; i++){
+    if(Process[i].state == READY && Process[i].sus != 1 && Process[i].priority < high_priority){
+      high_priority = Process[i].priority;
+    }
+  }
+
+  while(Process[NextP].state != READY || Process[NextP].sus == 1 || Process[NextP].priority > high_priority) {
+    NextP = (NextP + 1) % MAXPROCESS;
+  }
+
+  Cp = &(Process[NextP]);
+  CurrentSp = Cp->sp;
+  Cp->state = RUNNING;
+
+  NextP = (NextP + 1) % MAXPROCESS;
+}
+
 /**
   *  This is the set of states that a Mutex can be in at any given time.
   */
@@ -168,17 +193,23 @@ typedef enum mutex_states {
 typedef struct MutexDescriptor {
     MUTEX_STATES state;   
     MUTEX id;
-    PID owner_id;
-    PRIORITY owner_priority;
+    PD* owner;
+    PRIORITY original_priority;
     unsigned int lock_count;
     struct mutex_node *wait_queue;
 } MD;
+
+/* MUTEX CODE
+ *
+ *
+ *
+ *
+ */
 
 static MD Mutex[MAXMUTEX];
 
 /** number of mutexes created so far */
 volatile static unsigned int Mutexes;  
-
 
 /**
   *  Node for blocked queue for mutex
@@ -188,6 +219,7 @@ struct mutex_node{
   struct mutex_node *next;
 };
 
+<<<<<<< HEAD
 
 /* Event structures */
 typedef struct EventDescriptor {
@@ -201,28 +233,43 @@ volatile static unsigned int Events;
 static ED Event[MAXEVENT];
 
 
-void Kernel_Create_Mutex(PID owner_id, PRIORITY priority){
+void Kernel_Create_Mutex(PRIORITY priority){
   Mutex[Mutexes].state = UNLOCKED;
   Mutex[Mutexes].id = Mutexes;
-  Mutex[Mutexes].owner_id = owner_id;
-  Mutex[Mutexes].owner_priority = priority;
+  Mutex[Mutexes].owner = NULL;
+  Mutex[Mutexes].original_priority = priority;
   Mutex[Mutexes].lock_count = 0;
   Mutex[Mutexes].wait_queue = NULL;
 };
 
-
-void Kernel_Lock_Mutex(MUTEX mid){
-  if(!Mutex[mid].lock_count){
+void Kernel_Lock_Mutex(MUTEX mid, PD* Ct){
+  if(Mutex[mid].state == UNLOCKED || Ct->id == Mutex[mid].owner->id){
+    Ct->state = READY;
+    Mutex[mid].owner = Ct;
+    Mutex[mid].original_priority = Ct->priority;
+    Mutex[mid].lock_count++;
     Mutex[mid].state = LOCKED;
+  }else{
+    Ct->state = BLOCKED;
+    struct mutex_node *new_mutex_node = (struct mutex_node *) malloc(sizeof(struct mutex_node)); 
+    new_mutex_node->pd = (PD*) Ct;
+    new_mutex_node->next = Mutex[mid].wait_queue;
+    Mutex[mid].wait_queue = new_mutex_node;
+    Dispatch();
   }
-  Mutex[mid].lock_count++;
 };
 
-
-void Kernel_Unlock_Mutex(MUTEX mid){
-  Mutex[mid].lock_count--;
-  if(!Mutex[mid].lock_count){
-    Mutex[mid].state = UNLOCKED;
+void Kernel_Unlock_Mutex(MUTEX mid, PD* Ct){
+  if(Mutex[mid].state == LOCKED && Ct->id == Mutex[mid].owner->id){
+    Mutex[mid].lock_count--;
+    if(!Mutex[mid].lock_count){
+      Mutex[mid].state = UNLOCKED;
+      if(Mutex[mid].wait_queue != NULL){
+        PD* next_task = Mutex[mid].wait_queue->pd;
+        Mutex[mid].wait_queue = Mutex[mid].wait_queue->next; 
+        Kernel_Lock_Mutex(mid, next_task);
+      }
+    }
   }
 };
 
@@ -257,6 +304,7 @@ void Kernel_Event_Signal(EVENT e) {
     Process[waiting_pid-1].state = READY;
   }
 }
+
 
 
 /** number of tasks created so far */
@@ -344,34 +392,9 @@ static void Kernel_Create_Task(void (*f)(void), PRIORITY py, int arg)
 
    ++Tasks;
    Kernel_Create_Task_At( &(Process[x]), f, py, arg);
-
 }
 
 
-/*
-  * This internal kernel function is a part of the "scheduler". It chooses the 
-  * next task to run, i.e., Cp.
-  */
-static void Dispatch(){
-  PRIORITY high_priority = 10;
-
-  int i;
-  for(i = 0; i < MAXPROCESS; i++){
-    if(Process[i].state == READY && Process[i].sus != 1 && Process[i].priority < high_priority){
-      high_priority = Process[i].priority;
-    }
-  }
-
-  while(Process[NextP].state != READY || Process[NextP].sus == 1 || Process[NextP].priority > high_priority) {
-    NextP = (NextP + 1) % MAXPROCESS;
-  }
-
-  Cp = &(Process[NextP]);
-  CurrentSp = Cp->sp;
-  Cp->state = RUNNING;
-
-  NextP = (NextP + 1) % MAXPROCESS;
-}
 
 /**
   * This internal kernel function is the "main" driving loop of this full-served
@@ -429,13 +452,13 @@ static void Next_Kernel_Request() {
         Dispatch();
         break;
       case CREATE_MUTEX:
-        Kernel_Create_Mutex(Cp->id, Cp->priority);
+        Kernel_Create_Mutex(Cp->priority);
         break;
       case LOCK_MUTEX:
-        Kernel_Lock_Mutex(Cp->mid);
+        Kernel_Lock_Mutex(Cp->mid, (PD*) Cp);
         break;
       case UNLOCK_MUTEX:
-        Kernel_Unlock_Mutex(Cp->mid);
+        Kernel_Unlock_Mutex(Cp->mid, (PD*) Cp);
         break;
       case CREATE_EVENT:
         Kernel_Create_Event();
@@ -653,18 +676,29 @@ void enter_sleep_queue(){
 
 
 MUTEX Mutex_Init(void){
-  Disable_Interrupt();
-  Cp->request = CREATE_MUTEX;
-  Enter_Kernel();
-  return (MUTEX)Mutexes++;
+  if(KernelActive){
+    Disable_Interrupt();
+    Cp->request = CREATE_MUTEX;
+    Enter_Kernel();
+    return (Mutexes++);
+  }else{
+    Kernel_Create_Mutex(10);
+    return (Mutexes++);
+  }
 };
 
 void Mutex_Lock(MUTEX m){
-
+  Disable_Interrupt();
+  Cp->request = LOCK_MUTEX;
+  Cp->mid = m;
+  Enter_Kernel();
 };
 
 void Mutex_Unlock(MUTEX m){
-
+  Disable_Interrupt();
+  Cp->request = UNLOCK_MUTEX;
+  Cp->mid = m;
+  Enter_Kernel();
 };
 
 

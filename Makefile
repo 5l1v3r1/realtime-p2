@@ -44,7 +44,7 @@ test_mutex: test_mutex.c
 	$(CC) $(FLAGS) test_mutex.c
 	$(CC) $(ELFFLAGS) img.elf cswitch.o os.o test_mutex.o
 
-test: compile test_sleep hex load
+test: compile test_mutex hex load
 
 clean:
 	rm -f *.elf *.o *.hex
