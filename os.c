@@ -89,7 +89,10 @@ typedef enum kernel_request_type
    SLEEP,
    CREATE_MUTEX,
    LOCK_MUTEX,
-   UNLOCK_MUTEX
+   UNLOCK_MUTEX,
+   CREATE_EVENT,
+   EVENT_WAIT,
+   EVENT_SIGNAL
 } KERNEL_REQUEST_TYPE;
 
 /**
@@ -105,6 +108,7 @@ typedef struct ProcessDescriptor
    
    PID id;
    MUTEX mid;
+   EVENT e;
    PRIORITY priority;
    int argument;
    int sus;
@@ -185,6 +189,18 @@ struct mutex_node{
 };
 
 
+/* Event structures */
+typedef struct EventDescriptor {
+  EVENT id;
+  unsigned int signalled;
+  PD *waiting_pid;
+} ED;
+
+volatile static unsigned int Events;
+
+static ED Event[MAXEVENT];
+
+
 void Kernel_Create_Mutex(PID owner_id, PRIORITY priority){
   Mutex[Mutexes].state = UNLOCKED;
   Mutex[Mutexes].id = Mutexes;
@@ -209,6 +225,38 @@ void Kernel_Unlock_Mutex(MUTEX mid){
     Mutex[mid].state = UNLOCKED;
   }
 };
+
+/* Create event */
+void Kernel_Create_Event() {
+  Event[Events].id = Events;
+  Event[Events].signalled = 0;
+  Event[Events].waiting_pid = (PID) 0;
+}
+
+/* Leaves current task blocked on the event if there are no other tasks waiting on it
+* If the event has already been signalled or there is another task waiting on it the process keeps running
+*/
+void Kernel_Event_Wait(EVENT e) {
+  unsigned int index = (unsigned int)(e)-1;
+  if(Event[index].waiting_pid || Event[index].signalled == 1) {
+    Cp->state = RUNNING;
+  } else {
+    Event[index].waiting_pid = Cp->id;
+  }
+}
+
+/* Records that the event has been signalled
+* If there is already a task waiting on that event this task is unblocked */
+void Kernel_Event_Signal(EVENT e) {
+  unsigned int index = (unsigned int)(e)-1;
+  Event[index].signalled = 1;
+  PID waiting_pid = Event[index].waiting_pid;
+  if(waiting_pid) {
+    //change waiting task's state to READY
+    //add 1 to index b/c process[i-1].id = i
+    Process[waiting_pid-1].state = READY;
+  }
+}
 
 
 /** number of tasks created so far */
@@ -388,6 +436,16 @@ static void Next_Kernel_Request() {
         break;
       case UNLOCK_MUTEX:
         Kernel_Unlock_Mutex(Cp->mid);
+        break;
+      case CREATE_EVENT:
+        Kernel_Create_Event();
+        break;
+      case EVENT_WAIT:
+        Cp->state = BLOCKED;
+        Kernel_Event_Wait(Cp->e);
+        break;
+      case EVENT_SIGNAL:
+        Kernel_Event_Signal(Cp->e);
         break;
       default:
         /* Houston! we have a problem here! */
@@ -616,16 +674,33 @@ void Mutex_Unlock(MUTEX m){
   *================
   */
 
+/* Sends a request to the kernal for the creation of an event
+* Returns event id
+*/
 EVENT Event_Init(void){
-
+  Disable_Interrupt();
+  Events++;
+  Cp->request = CREATE_EVENT;
+  Enter_Kernel();
+  return (EVENT)Events;
 };
 
+
+/* This function */
 void Event_Wait(EVENT e){
-
+  Disable_Interrupt();
+  Cp->e = e;
+  Cp->request = EVENT_WAIT;
+  Enter_Kernel();
 };
 
+/* When an event is signalled, it wakes up a waiting task if there is one, otherwise it is recorded
+*only one outstanding signal on an event is recorded, hence any subsequent signals on the same event will be lost
+*/
 void Event_Signal(EVENT e){
-
+  Disable_Interrupt();
+  Cp->e = e;
+  Enter_Kernel();
 };
 
 
@@ -637,6 +712,7 @@ void OS_Init() {
   int x;
   Tasks = 0;
   Mutexes = 0;
+  Events = 0;
   KernelActive = 0;
   NextP = 0;
 
@@ -646,11 +722,14 @@ void OS_Init() {
     Process[x].state = DEAD;
   }
 
-  //Reminder: Clear the memory for the m on creation.
+  //Reminder: Clear the memory for the m and events on creation.
   for (x = 0; x < MAXMUTEX; x++) {
     memset(&(Mutex[x]),0,sizeof(MD));
+    memset(&(Event[x]),0,sizeof(ED));
     Mutex[x].state = UNLOCKED;
   }
+
+
 }
 
 /**
