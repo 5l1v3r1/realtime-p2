@@ -219,8 +219,6 @@ struct mutex_node{
   struct mutex_node *next;
 };
 
-<<<<<<< HEAD
-
 /* Event structures */
 typedef struct EventDescriptor {
   EVENT id;
