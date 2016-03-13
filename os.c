@@ -16,9 +16,9 @@ typedef void (*voidfuncptr) (void);      /* pointer to void f(void) */
 
 void debug_flash(){
   PORTB = 0x60;
-  _delay_ms(500);
+  _delay_ms(100);
   PORTB = 0x00;
-  _delay_ms(500);
+  _delay_ms(100);
 }
 
 
@@ -537,10 +537,11 @@ void Task_Sleep(TICK t){
 ISR(TIMER1_COMPA_vect){
   struct sleep_node *curr_sleep_node = sleep_queue_head;
   struct sleep_node *next_sleep_node = curr_sleep_node->next;
-
   while(curr_sleep_node != NULL){
-    
     curr_sleep_node->sleep_actual_count++;
+
+    //THE LINE BELOW TOOK ME 2 HOURS TO DEBUG, #MyLifeIsAverage
+    next_sleep_node = curr_sleep_node->next;
 
     if(curr_sleep_node->sleep_actual_count >= curr_sleep_node->sleep_expected_count){
       Task_Resume(curr_sleep_node->pd->id);

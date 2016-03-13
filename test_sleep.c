@@ -15,8 +15,7 @@ void Task_3(){
 
 void Task_2(){
   for(;;){
-    //TODO: Broken on multiple concurent sleep, Occurs upon deletion of sleep node
-    //Task_Sleep(1000);
+    Task_Sleep(1000);
     PORTB = 0x20;
     _delay_ms(50);
     Task_Yield();
