@@ -237,6 +237,12 @@ void Kernel_Lock_Mutex(MUTEX mid, PD* Ct){
     new_mutex_node->pd = (PD*) Ct;
     new_mutex_node->next = Mutex[mid].wait_queue;
     Mutex[mid].wait_queue = new_mutex_node;
+    
+    //Priority Inheritence
+    if(Ct->priority < Mutex[mid].owner->priority){
+      Mutex[mid].owner->priority = Ct->priority; 
+    }
+
     Dispatch();
   }
 };
@@ -246,6 +252,10 @@ void Kernel_Unlock_Mutex(MUTEX mid, PD* Ct){
     Mutex[mid].lock_count--;
     if(!Mutex[mid].lock_count){
       Mutex[mid].state = UNLOCKED;
+
+      // Return inheirited priority
+      Mutex[mid].owner->priority = Mutex[mid].original_priority;
+      
       if(Mutex[mid].wait_queue != NULL){
         PD* next_task = Mutex[mid].wait_queue->pd;
         Mutex[mid].wait_queue = Mutex[mid].wait_queue->next; 
