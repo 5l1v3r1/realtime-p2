@@ -208,6 +208,7 @@ void Kernel_Lock_Mutex(MUTEX mid, PID id){
     new_mutex_node->pd = (PD*) &(Process[id]);
     new_mutex_node->next = Mutex[mid].wait_queue;
     Mutex[mid].wait_queue = new_mutex_node;
+    Dispatch();
   }
 };
 
@@ -327,9 +328,8 @@ static void Kernel_Create_Task(void (*f)(void), PRIORITY py, int arg)
        if (Process[x].state == DEAD) break;
    }
 
-   ++Tasks;
    Kernel_Create_Task_At( &(Process[x]), f, py, arg);
-
+   ++Tasks;
 }
 
 
