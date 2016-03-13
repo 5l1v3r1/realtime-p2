@@ -36,7 +36,11 @@ test_sleep: test_sleep.c
 	$(CC) $(FLAGS) test_sleep.c
 	$(CC) $(ELFFLAGS) img.elf cswitch.o os.o test_sleep.o
 
-test: compile test_sleep hex load
+test_pre_empt: test_pre_empt.c
+	$(CC) $(FLAGS) test_pre_empt.c
+	$(CC) $(ELFFLAGS) img.elf cswitch.o os.o test_pre_empt.o
+
+test: compile test_pre_empt hex load
 
 clean:
 	rm -f *.elf *.o *.hex

@@ -239,25 +239,29 @@ static void Kernel_Create_Task(void (*f)(void), PRIORITY py, int arg)
 }
 
 
-/**
+/*
   * This internal kernel function is a part of the "scheduler". It chooses the 
   * next task to run, i.e., Cp.
-  *TO DO: check for sus flags
   */
-static void Dispatch()
-{
-     /* find the next READY task
-       * Note: if there is no READY task, then this will loop forever!.
-       */
-   while(Process[NextP].state != READY || Process[NextP].sus == 1) {
-      NextP = (NextP + 1) % MAXPROCESS;
-   }
+static void Dispatch(){
+  PRIORITY high_priority = 10;
 
-   Cp = &(Process[NextP]);
-   CurrentSp = Cp->sp;
-   Cp->state = RUNNING;
+  int i;
+  for(i = 0; i < MAXPROCESS; i++){
+    if(Process[i].state == READY && Process[i].sus != 1 && Process[i].priority < high_priority){
+      high_priority = Process[i].priority;
+    }
+  }
 
-   NextP = (NextP + 1) % MAXPROCESS;
+  while(Process[NextP].state != READY || Process[NextP].sus == 1 || Process[NextP].priority > high_priority) {
+    NextP = (NextP + 1) % MAXPROCESS;
+  }
+
+  Cp = &(Process[NextP]);
+  CurrentSp = Cp->sp;
+  Cp->state = RUNNING;
+
+  NextP = (NextP + 1) % MAXPROCESS;
 }
 
 /**
@@ -313,6 +317,7 @@ static void Next_Kernel_Request() {
           break;
         case TERMINATE:
           /* deallocate all resources used by this task */
+          --Tasks;
           Cp->state = DEAD;
           Dispatch();
           break;
@@ -341,9 +346,9 @@ void OS_Abort(void);
   * Create task with given priority and argument, return the process ID
   */
 PID Task_Create( void (*f)(void), PRIORITY py, int arg){
-  if (KernelActive ) {
+  if(KernelActive){
     Disable_Interrupt();
-    Cp ->request = CREATE;
+    Cp->request = CREATE;
     Cp->code = f;
     Cp->id = (PID) Tasks;
     Cp->argument = arg;
@@ -361,12 +366,12 @@ PID Task_Create( void (*f)(void), PRIORITY py, int arg){
   * The calling task terminates itself.
   */
 void Task_Terminate(void) {
-   if (KernelActive) {
-      Disable_Interrupt();
-      Cp -> request = TERMINATE;
-      Enter_Kernel();
-     /* never returns here! */
-   }
+  if (KernelActive) {
+    Disable_Interrupt();
+    Cp -> request = TERMINATE;
+    Enter_Kernel();
+    /* never returns here! */
+  }
 }
 
 void Task_Yield(void){
