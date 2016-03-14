@@ -1,4 +1,4 @@
-/* Tests task signalling event before another task waits on it */
+/* Tests a task waiting on an event before the signal is sent */
 
 #include "os.h"
 #include <avr/io.h>
@@ -50,6 +50,6 @@ void a_main() {
 	blink_increment = Event_Init();
 
 	// if these tasks are swapped so task 2 must wait on task 1 system fails
-	Task_Create(Task_1, 0, 0);
 	Task_Create(Task_2, 0, 0);
+	Task_Create(Task_1, 0, 0);
 }

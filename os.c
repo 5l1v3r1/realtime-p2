@@ -309,7 +309,7 @@ void Kernel_Event_Wait(PD* Ct) {
     Ct->state = RUNNING;
     Event[index].signalled = 0;
   }else {
-    Event[index].waiting_p = &Process[Ct->id-1];
+    Event[index].waiting_p = Ct;
     Dispatch();
   }
 }
