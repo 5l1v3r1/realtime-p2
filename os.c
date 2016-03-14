@@ -295,7 +295,12 @@ void Kernel_Unlock_Mutex(MUTEX mid, PD* Ct){
       Mutex[mid].owner->priority = Mutex[mid].original_priority;
       
       if(Mutex[mid].wait_queue != NULL){
+        /* dequeue dead processes */
+        while(Mutex[mid].wait_queue->pd->state == DEAD) {
+          Mutex[mid].wait_queue = Mutex[mid].wait_queue->next;
+        }
         PD* next_task = Mutex[mid].wait_queue->pd;
+        
         Mutex[mid].wait_queue = Mutex[mid].wait_queue->next; 
         Kernel_Lock_Mutex(mid, next_task);
       }
@@ -525,7 +530,7 @@ static void Next_Kernel_Request() {
 void OS_Abort(void);
 
 /*================
-  *  FUCNTIONS
+  *  FUNCTIONS
   *================
   */
 

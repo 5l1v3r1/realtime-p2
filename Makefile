@@ -28,9 +28,9 @@ hex: img.elf
 load:
 	$(LOAD) $(LOADFLAGS)
 
-test_sus: test_sus_resume.c
-	$(CC) $(FLAGS) test_sus_resume.c
-	$(CC) $(ELFFLAGS) img.elf cswitch.o os.o test_sus_resume.o
+test_sus: test_sus_dne.c
+	$(CC) $(FLAGS) test_sus_dne.c
+	$(CC) $(ELFFLAGS) img.elf cswitch.o os.o test_sus_dne.o
 
 test_sleep: test_sleep.c
 	$(CC) $(FLAGS) test_sleep.c
@@ -40,15 +40,15 @@ test_pre_empt: test_pre_empt.c
 	$(CC) $(FLAGS) test_pre_empt.c
 	$(CC) $(ELFFLAGS) img.elf cswitch.o os.o test_pre_empt.o
 
-test_mutex: test_mutex_dne.c
-	$(CC) $(FLAGS) test_mutex_dne.c
-	$(CC) $(ELFFLAGS) img.elf cswitch.o os.o test_mutex_dne.o
+test_mutex: test_mutex.c
+	$(CC) $(FLAGS) test_mutex.c
+	$(CC) $(ELFFLAGS) img.elf cswitch.o os.o test_mutex.o
 
 test_event: test_event1.c
 	$(CC) $(FLAGS) test_event1.c
 	$(CC) $(ELFFLAGS) img.elf cswitch.o os.o test_event1.o
 
-test: compile test_mutex hex load
+test: compile test_sus hex load
 
 clean:
 	rm -f *.elf *.o *.hex

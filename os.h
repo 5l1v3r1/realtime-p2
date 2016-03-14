@@ -13,10 +13,10 @@
 #define NULL          0   /* undefined */
 #endif
 
-typedef unsigned int PID;        // always non-zero if it is valid
-typedef unsigned int MUTEX;      // always non-zero if it is valid
+typedef unsigned int PID;       
+typedef unsigned int MUTEX;      
 typedef unsigned char PRIORITY;
-typedef unsigned int EVENT;      // always non-zero if it is valid
+typedef unsigned int EVENT;      
 typedef unsigned int TICK;
 
 void OS_Abort(void);
