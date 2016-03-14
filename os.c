@@ -864,14 +864,14 @@ void Event_Signal(EVENT e){
 * system calls.
 */
 void main() {
-  int x;
   Tasks = 0;
   Mutexes = 0;
   Events = 0;
   KernelActive = 0;
   NextP = 0;
-  DDRB = 0xF0;
+  FreeTaskId = 0;
 
+  int x;
   //Reminder: Clear the memory for the task on creation.
   for (x = 0; x < MAXTHREAD; x++) {
     memset(&(Process[x]),0,sizeof(PD));
@@ -891,8 +891,10 @@ void main() {
     Event[x].id = MAXEVENT;
   }
 
+  //Create the Application main task with the highest priority
   Task_Create(a_main, 0, 0);
 
+  //Begin the RTOS
   Disable_Interrupt();
   KernelActive = 1;
   Next_Kernel_Request();
