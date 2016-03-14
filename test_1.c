@@ -19,18 +19,35 @@ MUTEX mut;
 EVENT evt;
 
 void Task_P1(){
+    PORTB   = 0x10;
+    _delay_ms(1);
+    PORTB   = 0x00;
+    
     Task_Sleep(10); // sleep 100ms
+    
+    PORTB   = 0x10;
+    _delay_ms(1);
+    PORTB   = 0x00;
+    
     Mutex_Lock(mut);
     for(;;);
 }
 
 void Task_P2(){
+    PORTB   = 0x20;
+    _delay_ms(1000);
+    PORTB   = 0x00;
+    
     Task_Sleep(20); // sleep 200ms
     Event_Signal(evt);
     for(;;);
 }
 
 void Task_P3(){
+    PORTB   = 0x40;
+    _delay_ms(1000);
+    PORTB   = 0x00;
+
     Mutex_Lock(mut);
     Event_Wait(evt);
     Mutex_Unlock(mut);
@@ -39,8 +56,6 @@ void Task_P3(){
 
 void a_main(){
     DDRB    = 0xF0;
-    PORTB   = 0xF0;
-    _delay_ms(1000);
     PORTB   = 0x00;
 
     mut = Mutex_Init();
