@@ -223,7 +223,7 @@ struct mutex_node{
 typedef struct EventDescriptor {
   EVENT id;
   unsigned int signalled;
-  PD *waiting_pid;
+  PD *waiting_p;
 } ED;
 
 volatile static unsigned int Events;
@@ -275,31 +275,36 @@ void Kernel_Unlock_Mutex(MUTEX mid, PD* Ct){
 void Kernel_Create_Event() {
   Event[Events].id = Events;
   Event[Events].signalled = 0;
-  Event[Events].waiting_pid = (PID) 0;
+  Event[Events].waiting_p = NULL;
 }
 
-/* Leaves current task blocked on the event if there are no other tasks waiting on it
-* If the event has already been signalled or there is another task waiting on it the process keeps running
+/* Leaves current task blocked on the event and calls the dispatcher if there are no other tasks waiting on it
+* If the event has already been signalled or there is another task waiting on it the current task keeps running
 */
-void Kernel_Event_Wait(EVENT e) {
-  unsigned int index = (unsigned int)(e)-1;
-  if(Event[index].waiting_pid || Event[index].signalled == 1) {
-    Cp->state = RUNNING;
-  } else {
-    Event[index].waiting_pid = Cp->id;
+void Kernel_Event_Wait(PD* Ct) {
+  unsigned int index = (unsigned int)(Ct->e)-1;
+  if(Event[index].waiting_p != NULL) {
+    Ct->state = RUNNING;   
+  } else if(Event[index].signalled == 1) {
+    Ct->state = RUNNING;
+    Event[index].signalled = 0;
+  }else {
+    Event[index].waiting_p = &Process[Ct->id-1];
+    Dispatch();
   }
 }
 
 /* Records that the event has been signalled
-* If there is already a task waiting on that event this task is unblocked */
+* If there is already a task waiting on that event this task is unblocked
+*/
 void Kernel_Event_Signal(EVENT e) {
   unsigned int index = (unsigned int)(e)-1;
   Event[index].signalled = 1;
-  PID waiting_pid = Event[index].waiting_pid;
-  if(waiting_pid) {
+  if(Event[index].waiting_p != NULL) {
     //change waiting task's state to READY
-    //add 1 to index b/c process[i-1].id = i
-    Process[waiting_pid-1].state = READY;
+    Event[index].waiting_p->state = READY;
+    Event[index].waiting_p = NULL;
+    Event[index].signalled = 0;
   }
 }
 
@@ -463,9 +468,13 @@ static void Next_Kernel_Request() {
         break;
       case EVENT_WAIT:
         Cp->state = BLOCKED;
-        Kernel_Event_Wait(Cp->e);
+        Kernel_Event_Wait((PD*) Cp);
         break;
       case EVENT_SIGNAL:
+      PORTB = 0x10;
+        _delay_ms(500);
+        PORTB = 0x00;
+        _delay_ms(500);
         Kernel_Event_Signal(Cp->e);
         break;
       default:
@@ -729,9 +738,10 @@ void Event_Wait(EVENT e){
 /* When an event is signalled, it wakes up a waiting task if there is one, otherwise it is recorded
 *only one outstanding signal on an event is recorded, hence any subsequent signals on the same event will be lost
 */
-void Event_Signal(EVENT e){
+void Event_Signal(EVENT event){
   Disable_Interrupt();
-  Cp->e = e;
+  Cp->e = event;
+  Cp->request = EVENT_SIGNAL;
   Enter_Kernel();
 };
 
