@@ -97,21 +97,23 @@ typedef enum kernel_request_type
   * relevant information about this task. For convenience, we also store
   * the task's stack, i.e., its workspace, in here.
   */
-typedef struct ProcessDescriptor 
-{
-   unsigned char *sp;   /* stack pointer into the "workSpace" */
-   unsigned char workSpace[WORKSPACE]; 
-   PROCESS_STATES state;
-   
-   PID id;
-   MUTEX mid;
-   PRIORITY priority;
-   int argument;
-   int sus;
-   TICK sleep_time;
+typedef struct ProcessDescriptor {
+  unsigned char *sp;   /* stack pointer into the "workSpace" */
+  unsigned char workSpace[WORKSPACE]; 
+  PROCESS_STATES state;
+  TICK sleep_time;
+  int sus;
 
-   voidfuncptr  code;   /* function to be executed as a task */
-   KERNEL_REQUEST_TYPE request;
+  PID id;
+  PRIORITY priority;
+  int argument;
+  
+  MUTEX mid;
+  PRIORITY create_priority;
+  int create_argument;
+
+  voidfuncptr  code;   /* function to be executed as a task */
+  KERNEL_REQUEST_TYPE request;
 } PD;
 
 
@@ -226,6 +228,7 @@ void Kernel_Create_Mutex(PRIORITY priority){
 
 void Kernel_Lock_Mutex(MUTEX mid, PD* Ct){
   if(Mutex[mid].state == UNLOCKED || Ct->id == Mutex[mid].owner->id){
+    debug_flash();
     Ct->state = READY;
     Mutex[mid].owner = Ct;
     Mutex[mid].original_priority = Ct->priority;
@@ -323,9 +326,9 @@ void Kernel_Create_Task_At( PD *p, void (*f)(void), PRIORITY py, int arg)
    sp = sp - 34;
 #endif
       
-   p->sp = sp;    /* stack pointer into the "workSpace" */
-   p->code = f;   /* function to be executed as a task */
-   p->request = NONE;
+  p->sp = sp;    /* stack pointer into the "workSpace" */
+  p->code = f;   /* function to be executed as a task */
+  p->request = NONE;
   p->id = (PID) Tasks;
   p->argument = arg;
   p->priority = py;
@@ -382,7 +385,7 @@ static void Next_Kernel_Request() {
 
     switch(Cp->request){
       case CREATE:
-        Kernel_Create_Task(Cp->code, Cp->priority, Cp->argument);
+        Kernel_Create_Task(Cp->code, Cp->create_priority, Cp->create_argument);
         break;
       case SUSPEND:
         Cp->sus = 1;
@@ -449,9 +452,8 @@ PID Task_Create( void (*f)(void), PRIORITY py, int arg){
     Disable_Interrupt();
     Cp->request = CREATE;
     Cp->code = f;
-    Cp->id = (PID) Tasks;
-    Cp->argument = arg;
-    Cp->priority = py;
+    Cp->create_argument = arg;
+    Cp->create_priority = py;
     Cp->sus = 0;
     Enter_Kernel();
   } else { 
