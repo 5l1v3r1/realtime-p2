@@ -44,9 +44,9 @@ test_mutex: test_mutex.c
 	$(CC) $(FLAGS) test_mutex.c
 	$(CC) $(ELFFLAGS) img.elf cswitch.o os.o test_mutex.o
 
-test_event: test_event1.c
-	$(CC) $(FLAGS) test_event1.c
-	$(CC) $(ELFFLAGS) img.elf cswitch.o os.o test_event1.o
+test_event: test_event.c
+	$(CC) $(FLAGS) test_event.c
+	$(CC) $(ELFFLAGS) img.elf cswitch.o os.o test_event.o
 
 test: compile test_event hex load
 
