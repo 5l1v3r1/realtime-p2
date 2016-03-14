@@ -37,14 +37,12 @@ void Task_1(){
   }
 }
 
-int main() {
+int a_main() {
   DDRB = 0xF0;
   PORTB = 0x00;
 
-  OS_Init();
   Task_Create(Task_4, 0, 0); // Pin 12
   Task_Create(Task_3, 1, 1); // Pin 12
   Task_Create(Task_2, 2, 2); // Pin 12
   Task_Create(Task_1, 3, 3); // Pin 12
-  OS_Start();
 }

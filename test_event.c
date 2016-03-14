@@ -39,12 +39,10 @@ void Task_2() {
 	}
 }
 
-int main() {
+void a_main() {
 	DDRB = 0xF0;
 	PORTB = 0x00;
 
-	OS_Init();
 	Task_Create(Task_1, 0x00, 0x00);
 	Task_Create(Task_2, 0x00, 0x00);
-	OS_Start();
 }
