@@ -105,14 +105,19 @@ typedef struct ProcessDescriptor
    unsigned char *sp;   /* stack pointer into the "workSpace" */
    unsigned char workSpace[WORKSPACE]; 
    PROCESS_STATES state;
-   
+   TICK sleep_time;
+  int sus;
+
    PID id;
-   MUTEX mid;
-   EVENT e;
+   
    PRIORITY priority;
    int argument;
-   int sus;
-   TICK sleep_time;
+
+    MUTEX mid;
+   EVENT e;
+
+   PRIORITY create_priority;
+  int create_argument;
 
    voidfuncptr  code;   /* function to be executed as a task */
    KERNEL_REQUEST_TYPE request;
@@ -253,6 +258,12 @@ void Kernel_Lock_Mutex(MUTEX mid, PD* Ct){
     new_mutex_node->pd = (PD*) Ct;
     new_mutex_node->next = Mutex[mid].wait_queue;
     Mutex[mid].wait_queue = new_mutex_node;
+    
+    //Priority Inheritence
+    if(Ct->priority < Mutex[mid].owner->priority){
+      Mutex[mid].owner->priority = Ct->priority; 
+    }
+
     Dispatch();
   }
 };
@@ -262,6 +273,10 @@ void Kernel_Unlock_Mutex(MUTEX mid, PD* Ct){
     Mutex[mid].lock_count--;
     if(!Mutex[mid].lock_count){
       Mutex[mid].state = UNLOCKED;
+
+      // Return inheirited priority
+      Mutex[mid].owner->priority = Mutex[mid].original_priority;
+      
       if(Mutex[mid].wait_queue != NULL){
         PD* next_task = Mutex[mid].wait_queue->pd;
         Mutex[mid].wait_queue = Mutex[mid].wait_queue->next; 
@@ -366,9 +381,9 @@ void Kernel_Create_Task_At( PD *p, void (*f)(void), PRIORITY py, int arg)
    sp = sp - 34;
 #endif
       
-   p->sp = sp;    /* stack pointer into the "workSpace" */
-   p->code = f;   /* function to be executed as a task */
-   p->request = NONE;
+  p->sp = sp;    /* stack pointer into the "workSpace" */
+  p->code = f;   /* function to be executed as a task */
+  p->request = NONE;
   p->id = (PID) Tasks;
   p->argument = arg;
   p->priority = py;
@@ -425,7 +440,7 @@ static void Next_Kernel_Request() {
 
     switch(Cp->request){
       case CREATE:
-        Kernel_Create_Task(Cp->code, Cp->priority, Cp->argument);
+        Kernel_Create_Task(Cp->code, Cp->create_priority, Cp->create_argument);
         break;
       case SUSPEND:
         Cp->sus = 1;
@@ -506,9 +521,8 @@ PID Task_Create( void (*f)(void), PRIORITY py, int arg){
     Disable_Interrupt();
     Cp->request = CREATE;
     Cp->code = f;
-    Cp->id = (PID) Tasks;
-    Cp->argument = arg;
-    Cp->priority = py;
+    Cp->create_argument = arg;
+    Cp->create_priority = py;
     Cp->sus = 0;
     Enter_Kernel();
   } else { 
