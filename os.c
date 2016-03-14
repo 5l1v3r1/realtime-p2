@@ -216,6 +216,7 @@ typedef struct MutexDescriptor {
  *
  */
 
+/* Add one for 1st indexed array  */
 static MD Mutex[MAXMUTEX];
 
 /** number of mutexes created so far */
@@ -238,10 +239,13 @@ typedef struct EventDescriptor {
 
 volatile static unsigned int Events;
 
+/* add one for 1st indexed array use */
 static ED Event[MAXEVENT];
 
 
 void Kernel_Create_Mutex(PRIORITY priority){
+  if(Mutexes >= MAXMUTEX) return; /* prevents creation of too many mutexes */
+
   Mutex[Mutexes].state = UNLOCKED;
   Mutex[Mutexes].id = Mutexes;
   Mutex[Mutexes].owner = NULL;
@@ -251,6 +255,10 @@ void Kernel_Create_Mutex(PRIORITY priority){
 };
 
 void Kernel_Lock_Mutex(MUTEX mid, PD* Ct){
+  if(Mutex[mid].id == MAXMUTEX || mid >= MAXMUTEX) {
+    return;
+  }
+
   if(Mutex[mid].state == UNLOCKED || Ct->id == Mutex[mid].owner->id){
     Ct->state = READY;
     Mutex[mid].owner = Ct;
@@ -274,6 +282,10 @@ void Kernel_Lock_Mutex(MUTEX mid, PD* Ct){
 };
 
 void Kernel_Unlock_Mutex(MUTEX mid, PD* Ct){
+  if(Mutex[mid].id == MAXMUTEX || mid >= MAXMUTEX) {
+    return;
+  }
+
   if(Mutex[mid].state == LOCKED && Ct->id == Mutex[mid].owner->id){
     Mutex[mid].lock_count--;
     if(!Mutex[mid].lock_count){
@@ -293,6 +305,8 @@ void Kernel_Unlock_Mutex(MUTEX mid, PD* Ct){
 
 /* Create event */
 void Kernel_Create_Event() {
+  if(Events >= MAXEVENT) return;
+
   Event[Events].id = Events;
   Event[Events].signalled = 0;
   Event[Events].waiting_p = NULL;
@@ -302,8 +316,10 @@ void Kernel_Create_Event() {
 * If the event has already been signalled or there is another task waiting on it the current task keeps running
 */
 void Kernel_Event_Wait(PD* Ct) {
-  unsigned int index = (unsigned int)(Ct->e)-1;
-  if(Event[index].waiting_p != NULL) {
+  unsigned int index = (unsigned int)(Ct->e);
+
+
+  if(Event[index].id == 0 || Event[index].waiting_p != NULL) {
     Ct->state = RUNNING;   
   } else if(Event[index].signalled == 1) {
     Ct->state = RUNNING;
@@ -318,7 +334,10 @@ void Kernel_Event_Wait(PD* Ct) {
 * If there is already a task waiting on that event this task is unblocked
 */
 void Kernel_Event_Signal(EVENT e) {
-  unsigned int index = (unsigned int)(e)-1;
+  unsigned int index = (unsigned int)(e);
+
+  if(Event[index].id == MAXEVENT) return;
+
   Event[index].signalled = 1;
   if(Event[index].waiting_p != NULL) {
     //change waiting task's state to READY
@@ -726,15 +745,20 @@ void Mutex_Unlock(MUTEX m){
   *================
   */
 
-/* Sends a request to the kernal for the creation of an event
+/* Sends a request to the kernel for the creation of an event
 * Returns event id
 */
 EVENT Event_Init(void){
-  Disable_Interrupt();
-  Events++;
-  Cp->request = CREATE_EVENT;
-  Enter_Kernel();
-  return (EVENT)Events;
+  if(KernelActive) {
+    Disable_Interrupt();
+    Cp->request = CREATE_EVENT;
+    Enter_Kernel();
+    return (EVENT)Events++;
+  } else {
+    Kernel_Create_Event();
+    return (EVENT)Events++;
+  }
+  
 };
 
 
@@ -781,6 +805,8 @@ void main() {
     memset(&(Mutex[x]),0,sizeof(MD));
     memset(&(Event[x]),0,sizeof(ED));
     Mutex[x].state = UNLOCKED;
+    Mutex[x].id = MAXMUTEX;
+    Event[x].id = MAXEVENT;
   }
 
   Task_Create(a_main, 0, 0);
