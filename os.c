@@ -486,10 +486,6 @@ static void Next_Kernel_Request() {
         Kernel_Event_Wait((PD*) Cp);
         break;
       case EVENT_SIGNAL:
-      PORTB = 0x10;
-        _delay_ms(500);
-        PORTB = 0x00;
-        _delay_ms(500);
         Kernel_Event_Signal(Cp->e);
         break;
       default:
