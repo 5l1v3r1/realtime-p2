@@ -362,13 +362,18 @@ void Kernel_Create_Event() {
 void Kernel_Event_Wait(PD* Ct) {
   unsigned int index = (unsigned int)(Ct->e);
 
+  // If another task is waiting on the event NoOp
+  if(Event[index].waiting_p != NULL) {
+    Ct->state = RUNNING;
 
-  if(Event[index].id == 0 || Event[index].waiting_p != NULL) {
-    Ct->state = RUNNING;   
+  // If waiting for event that has been signaled, reset signal and continue
   } else if(Event[index].signalled == 1) {
     Ct->state = RUNNING;
     Event[index].signalled = 0;
-  }else {
+
+  // Else Block current task, associate task with event and dispatch next task
+  }else{
+    Cp->state = BLOCKED;    
     Event[index].waiting_p = Ct;
     Dispatch();
   }
@@ -379,8 +384,6 @@ void Kernel_Event_Wait(PD* Ct) {
 */
 void Kernel_Event_Signal(EVENT e) {
   unsigned int index = (unsigned int)(e);
-
-  if(Event[index].id == MAXEVENT) return;
 
   Event[index].signalled = 1;
   if(Event[index].waiting_p != NULL) {
@@ -546,7 +549,6 @@ static void Next_Kernel_Request() {
         Kernel_Create_Event();
         break;
       case EVENT_WAIT:
-        Cp->state = BLOCKED;
         Kernel_Event_Wait((PD*) Cp);
         break;
       case EVENT_SIGNAL:
@@ -802,12 +804,13 @@ EVENT Event_Init(void){
     Kernel_Create_Event();
     return (EVENT)Events++;
   }
-  
 };
 
-
-/* This function */
+/* If event is waited on make EVENT_WAIT kernel request with the event id
+*
+*/
 void Event_Wait(EVENT e){
+  if(e == MAXEVENT) return;
   Disable_Interrupt();
   Cp->e = e;
   Cp->request = EVENT_WAIT;
@@ -817,9 +820,10 @@ void Event_Wait(EVENT e){
 /* When an event is signalled, it wakes up a waiting task if there is one, otherwise it is recorded
 *only one outstanding signal on an event is recorded, hence any subsequent signals on the same event will be lost
 */
-void Event_Signal(EVENT event){
+void Event_Signal(EVENT e){
+  if(e == MAXEVENT) return;
   Disable_Interrupt();
-  Cp->e = event;
+  Cp->e = e;
   Cp->request = EVENT_SIGNAL;
   Enter_Kernel();
 };
@@ -844,12 +848,16 @@ void main() {
     Process[x].state = DEAD;
   }
 
-  //Reminder: Clear the memory for the m and events on creation.
+  //Reminder: Clear the memory for the mutexes on creation.
   for (x = 0; x < MAXMUTEX; x++) {
     memset(&(Mutex[x]),0,sizeof(MD));
-    memset(&(Event[x]),0,sizeof(ED));
     Mutex[x].state = UNLOCKED;
     Mutex[x].id = MAXMUTEX;
+  }
+
+  //Reminder: Clear the memory for the events on creation.
+  for (x = 0; x < MAXEVENT; x++) {
+    memset(&(Event[x]),0,sizeof(ED));
     Event[x].id = MAXEVENT;
   }
 

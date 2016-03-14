@@ -1,4 +1,4 @@
-/* Tests task signalling event before another task waits on it */
+/* Tests a task waiting on an event before the signal is sent */
 
 #include "os.h"
 #include <avr/io.h>
@@ -10,37 +10,60 @@
 unsigned int blinks = 1;
 EVENT blink_increment;
 
+extern void debug_flash();
+
+void debug_flash_2(){
+	PORTB = 0xF0;
+	_delay_ms(500);
+	PORTB = 0x00;
+	_delay_ms(500);
+};
+
+
+void Task_2();
+
 void Task_1() {
+	//4. Signal to Task_2 waiting on blink_increment
+	Event_Signal(blink_increment);
+
+	//5. Yield to now READY Task_2
+	Task_Yield();
+
+	//8. Run and increment the blinks
 	int i;
-	while(1) {
-		Event_Signal(blink_increment);
-
-		for(i = 0; i<blinks; i++) {
-			PORTB = 0x20;
-		    _delay_ms(500);
-		    PORTB = 0x00;
-		    _delay_ms(500);
-		}
-
-		blinks++;
-		Task_Yield();
+	for(i = 0; i<blinks; i++) {
+		PORTB = 0x20;
+	    _delay_ms(500);
+	    PORTB = 0x00;
+	    _delay_ms(500);
 	}
+	blinks++;
+
+	//9. Create Task_2
+	Task_Create(Task_2, 0, 0);
+	
+	//10. Terminate the task, restarting the loop at Task_2
+	Task_Terminate();
 }
 
 void Task_2() {
-	while(1) {
-		Event_Wait(blink_increment);
+	//2. Create Task_1 which will signal Task_2
+	Task_Create(Task_1, 1, 0);
 
-		int i;
-		for(i = 0; i<blinks; i++) {
-			PORTB = 0x10;
-		    _delay_ms(500);
-		    PORTB = 0x00;
-		    _delay_ms(500);	
-		}
+	//3. Wait for signal, this will yield to the lower priority task_1
+	Event_Wait(blink_increment);
 
-		Task_Yield();
+	//6. Run the blink
+	int i;
+	for(i = 0; i<blinks; i++) {
+		PORTB = 0x10;
+	    _delay_ms(500);
+	    PORTB = 0x00;
+	    _delay_ms(500);	
 	}
+
+	//7.Terminate Task_2, continue to Task_1
+	Task_Terminate();
 }
 
 void a_main() {
@@ -49,7 +72,6 @@ void a_main() {
 
 	blink_increment = Event_Init();
 
-	// if these tasks are swapped so task 2 must wait on task 1 system fails
-	Task_Create(Task_1, 0, 0);
+	//1. Start Task_2
 	Task_Create(Task_2, 0, 0);
 }
