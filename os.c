@@ -256,11 +256,7 @@ static ED Event[MAXEVENT];
 
 
 void Kernel_Create_Mutex(PRIORITY priority){
-  if(Mutexes >= MAXMUTEX) {
-    err_no = E_EXCEEDS_MAXMUTEX;
-    error();
-    return; /* prevents creation of too many mutexes */
-  }
+  
 
   Mutex[Mutexes].state = UNLOCKED;
   Mutex[Mutexes].id = Mutexes;
@@ -271,11 +267,7 @@ void Kernel_Create_Mutex(PRIORITY priority){
 };
 
 void Kernel_Lock_Mutex(MUTEX mid, PD* Ct){
-  if(mid >= MAXMUTEX || Mutex[mid].id == MAXMUTEX) {
-    err_no = E_DNE;
-    error();
-    return;
-  }
+  
 
   if(Mutex[mid].state == UNLOCKED || Ct->id == Mutex[mid].owner->id){
     Ct->state = READY;
@@ -300,11 +292,6 @@ void Kernel_Lock_Mutex(MUTEX mid, PD* Ct){
 };
 
 void Kernel_Unlock_Mutex(MUTEX mid, PD* Ct){
-  if(Mutex[mid].id == MAXMUTEX || mid >= MAXMUTEX) {
-    err_no = E_DNE;
-    error();
-    return;
-  }
 
   if(Mutex[mid].state == LOCKED && Ct->id == Mutex[mid].owner->id){
     Mutex[mid].lock_count--;
@@ -330,11 +317,7 @@ void Kernel_Unlock_Mutex(MUTEX mid, PD* Ct){
 
 /* Create event */
 void Kernel_Create_Event() {
-  if(Events >= MAXEVENT) {
-    err_no = E_EXCEEDS_MAXEVENT;
-    error();
-    return;
-  }
+  
 
   Event[Events].id = Events;
   Event[Events].signalled = 0;
@@ -346,11 +329,6 @@ void Kernel_Create_Event() {
 */
 void Kernel_Event_Wait(PD* Ct) {
   unsigned int index = (unsigned int)(Ct->e);
-
-  if(index >= MAXEVENT || Event[index].id == MAXEVENT) {
-    err_no = E_DNE;
-    error();
-  }
 
   // If another task is waiting on the event NoOp
   if(Event[index].waiting_p != NULL) {
@@ -374,11 +352,6 @@ void Kernel_Event_Wait(PD* Ct) {
 */
 void Kernel_Event_Signal(EVENT e) {
   unsigned int index = (unsigned int)(e);
-
-  if(index >= MAXEVENT || Event[index].id == MAXEVENT) {
-    err_no = E_DNE;
-    error();
-  }
 
   Event[index].signalled = 1;
   if(Event[index].waiting_p != NULL) {
@@ -464,11 +437,6 @@ void Kernel_Create_Task_At( PD *p, void (*f)(void), PRIORITY py, int arg)
   *  Create a new task
   */
 static void Kernel_Create_Task(void (*f)(void), PRIORITY py, int arg) {
-   if (Tasks == MAXTHREAD) {
-    err_no = E_EXCEEDS_MAXPROCESS;
-    error();
-    return;  /* Too many tasks! */
-   }
 
 
    /* find a DEAD PD that we can use*/
@@ -579,6 +547,11 @@ void OS_Abort(void);
   * Create task with given priority and argument, return the process ID
   */
 PID Task_Create( void (*f)(void), PRIORITY py, int arg){
+  if (Tasks == MAXTHREAD) {
+    err_no = E_EXCEEDS_MAXPROCESS;
+    error();
+    return;  /* Too many tasks! */
+   }
 
   if(KernelActive){
     Disable_Interrupt();
@@ -764,6 +737,11 @@ void enter_sleep_queue(){
 
 
 MUTEX Mutex_Init(void){
+  if(Mutexes >= MAXMUTEX) {
+    err_no = E_EXCEEDS_MAXMUTEX;
+    error();
+    return; /* prevents creation of too many mutexes */
+  }
   if(KernelActive){
     Disable_Interrupt();
     Cp->request = CREATE_MUTEX;
@@ -776,6 +754,11 @@ MUTEX Mutex_Init(void){
 };
 
 void Mutex_Lock(MUTEX m){
+  if(m < 0 || m >= MAXMUTEX || Mutex[m].id == MAXMUTEX) {
+    err_no = E_DNE;
+    error();
+    return;
+  }
   Disable_Interrupt();
   Cp->request = LOCK_MUTEX;
   Cp->mid = m;
@@ -783,6 +766,11 @@ void Mutex_Lock(MUTEX m){
 };
 
 void Mutex_Unlock(MUTEX m){
+  if(m < 0 || m >= MAXMUTEX || Mutex[m].id == MAXMUTEX) {
+    err_no = E_DNE;
+    error();
+    return;
+  }
   Disable_Interrupt();
   Cp->request = UNLOCK_MUTEX;
   Cp->mid = m;
@@ -800,6 +788,11 @@ void Mutex_Unlock(MUTEX m){
 * Returns event id
 */
 EVENT Event_Init(void){
+  if(Events >= MAXEVENT) {
+    err_no = E_EXCEEDS_MAXEVENT;
+    error();
+    return;
+  }
   if(KernelActive) {
     Disable_Interrupt();
     Cp->request = CREATE_EVENT;
@@ -815,7 +808,11 @@ EVENT Event_Init(void){
 *
 */
 void Event_Wait(EVENT e){
-  if(e < 0 || e >= MAXEVENT || Event[e].id == MAXEVENT) return;
+  if(e < 0 || e >= MAXEVENT || Event[e].id == MAXEVENT) {
+    err_no = E_DNE;
+    error();
+    return;
+  }
   Disable_Interrupt();
   Cp->e = e;
   Cp->request = EVENT_WAIT;
@@ -826,7 +823,11 @@ void Event_Wait(EVENT e){
 *only one outstanding signal on an event is recorded, hence any subsequent signals on the same event will be lost
 */
 void Event_Signal(EVENT e){
-  if(e < 0 || e >= MAXEVENT || Event[e].id == MAXEVENT) return;
+  if(e < 0 || e >= MAXEVENT || Event[e].id == MAXEVENT) {
+    err_no = E_DNE;
+    error();
+    return;
+  }
   Disable_Interrupt();
   Cp->e = e;
   Cp->request = EVENT_SIGNAL;
