@@ -48,7 +48,7 @@ test_event: test_event.c
 	$(CC) $(FLAGS) test_event.c
 	$(CC) $(ELFFLAGS) img.elf cswitch.o os.o test_event.o
 
-test: compile test_mutex hex load
+test: compile test_event hex load
 
 clean:
 	rm -f *.elf *.o *.hex

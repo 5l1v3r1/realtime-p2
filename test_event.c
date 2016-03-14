@@ -1,5 +1,3 @@
-/*** Tests tasks calling event signal and wait  ***/
-
 #include "os.h"
 #include <avr/io.h>
 #include <avr/interrupt.h>
@@ -11,31 +9,35 @@ unsigned int blinks = 1;
 EVENT blink_increment;
 
 void Task_1() {
-	blink_increment = Event_Init();
 	int i;
 	while(1) {
 		Event_Signal(blink_increment);
+
 		for(i = 0; i<blinks; i++) {
 			PORTB = 0x20;
 		    _delay_ms(500);
 		    PORTB = 0x00;
 		    _delay_ms(500);
 		}
-		++blinks;
+
+		blinks++;
 		Task_Yield();
 	}
 }
 
 void Task_2() {
-	int i;
 	while(1) {
 		Event_Wait(blink_increment);
+
+		int i;
 		for(i = 0; i<blinks; i++) {
 			PORTB = 0x10;
 		    _delay_ms(500);
 		    PORTB = 0x00;
 		    _delay_ms(500);	
 		}
+
+		Task_Yield();
 	}
 }
 
@@ -43,6 +45,9 @@ void a_main() {
 	DDRB = 0xF0;
 	PORTB = 0x00;
 
-	Task_Create(Task_1, 0x00, 0x00);
-	Task_Create(Task_2, 0x00, 0x00);
+	blink_increment = Event_Init();
+
+	// if these tasks are swapped so task 2 must wait on task 1 system fails
+	Task_Create(Task_1, 0, 0);
+	Task_Create(Task_2, 0, 0);
 }
