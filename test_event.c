@@ -23,12 +23,13 @@ void debug_flash_2(){
 void Task_2();
 
 void Task_1() {
-	// Flashes all LEDS should happen before debug_flash()
-	debug_flash_2();
-
 	//4. Signal to Task_2 waiting on blink_increment
 	Event_Signal(blink_increment);
 
+	//5. Yield to now READY Task_2
+	Task_Yield();
+
+	//8. Run and increment the blinks
 	int i;
 	for(i = 0; i<blinks; i++) {
 		PORTB = 0x20;
@@ -36,11 +37,12 @@ void Task_1() {
 	    PORTB = 0x00;
 	    _delay_ms(500);
 	}
-
 	blinks++;
 
+	//9. Create Task_2
 	Task_Create(Task_2, 0, 0);
 	
+	//10. Terminate the task, restarting the loop at Task_2
 	Task_Terminate();
 }
 
@@ -51,9 +53,7 @@ void Task_2() {
 	//3. Wait for signal, this will yield to the lower priority task_1
 	Event_Wait(blink_increment);
 
-	//Flashes the two leds at pin 11 & 12 should occur after debug_flash_2();
-	debug_flash();
-
+	//6. Run the blink
 	int i;
 	for(i = 0; i<blinks; i++) {
 		PORTB = 0x10;
@@ -62,6 +62,7 @@ void Task_2() {
 	    _delay_ms(500);	
 	}
 
+	//7.Terminate Task_2, continue to Task_1
 	Task_Terminate();
 }
 

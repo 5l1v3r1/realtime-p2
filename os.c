@@ -323,13 +323,18 @@ void Kernel_Create_Event() {
 void Kernel_Event_Wait(PD* Ct) {
   unsigned int index = (unsigned int)(Ct->e);
 
-
-  if(Event[index].id == 0 || Event[index].waiting_p != NULL) {
+  // If another task is waiting on the event NoOp
+  if(Event[index].waiting_p != NULL) {
     Ct->state = RUNNING;   
+
+  // If waiting for event that has been signaled, reset signal and continue
   } else if(Event[index].signalled == 1) {
     Ct->state = RUNNING;
     Event[index].signalled = 0;
-  }else {
+
+  // Else Block current task, associate task with event and dispatch next task
+  }else{
+    Cp->state = BLOCKED;    
     Event[index].waiting_p = Ct;
     Dispatch();
   }
@@ -507,7 +512,6 @@ static void Next_Kernel_Request() {
         Kernel_Create_Event();
         break;
       case EVENT_WAIT:
-        Cp->state = BLOCKED;
         Kernel_Event_Wait((PD*) Cp);
         break;
       case EVENT_SIGNAL:
