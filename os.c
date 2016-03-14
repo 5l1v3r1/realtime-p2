@@ -91,7 +91,10 @@ typedef enum kernel_request_type
    SLEEP,
    CREATE_MUTEX,
    LOCK_MUTEX,
-   UNLOCK_MUTEX
+   UNLOCK_MUTEX,
+   CREATE_EVENT,
+   EVENT_WAIT,
+   EVENT_SIGNAL
 } KERNEL_REQUEST_TYPE;
 
 /**
@@ -99,23 +102,27 @@ typedef enum kernel_request_type
   * relevant information about this task. For convenience, we also store
   * the task's stack, i.e., its workspace, in here.
   */
-typedef struct ProcessDescriptor {
-  unsigned char *sp;   /* stack pointer into the "workSpace" */
-  unsigned char workSpace[WORKSPACE]; 
-  PROCESS_STATES state;
-  TICK sleep_time;
+typedef struct ProcessDescriptor 
+{
+   unsigned char *sp;   /* stack pointer into the "workSpace" */
+   unsigned char workSpace[WORKSPACE]; 
+   PROCESS_STATES state;
+   TICK sleep_time;
   int sus;
 
-  PID id;
-  PRIORITY priority;
-  int argument;
-  
-  MUTEX mid;
-  PRIORITY create_priority;
+   PID id;
+   
+   PRIORITY priority;
+   int argument;
+
+    MUTEX mid;
+   EVENT e;
+
+   PRIORITY create_priority;
   int create_argument;
 
-  voidfuncptr  code;   /* function to be executed as a task */
-  KERNEL_REQUEST_TYPE request;
+   voidfuncptr  code;   /* function to be executed as a task */
+   KERNEL_REQUEST_TYPE request;
 } PD;
 
 
@@ -219,6 +226,18 @@ struct mutex_node{
   struct mutex_node *next;
 };
 
+/* Event structures */
+typedef struct EventDescriptor {
+  EVENT id;
+  unsigned int signalled;
+  PD *waiting_p;
+} ED;
+
+volatile static unsigned int Events;
+
+static ED Event[MAXEVENT];
+
+
 void Kernel_Create_Mutex(PRIORITY priority){
   Mutex[Mutexes].state = UNLOCKED;
   Mutex[Mutexes].id = Mutexes;
@@ -268,6 +287,43 @@ void Kernel_Unlock_Mutex(MUTEX mid, PD* Ct){
     }
   }
 };
+
+/* Create event */
+void Kernel_Create_Event() {
+  Event[Events].id = Events;
+  Event[Events].signalled = 0;
+  Event[Events].waiting_p = NULL;
+}
+
+/* Leaves current task blocked on the event and calls the dispatcher if there are no other tasks waiting on it
+* If the event has already been signalled or there is another task waiting on it the current task keeps running
+*/
+void Kernel_Event_Wait(PD* Ct) {
+  unsigned int index = (unsigned int)(Ct->e)-1;
+  if(Event[index].waiting_p != NULL) {
+    Ct->state = RUNNING;   
+  } else if(Event[index].signalled == 1) {
+    Ct->state = RUNNING;
+    Event[index].signalled = 0;
+  }else {
+    Event[index].waiting_p = &Process[Ct->id-1];
+    Dispatch();
+  }
+}
+
+/* Records that the event has been signalled
+* If there is already a task waiting on that event this task is unblocked
+*/
+void Kernel_Event_Signal(EVENT e) {
+  unsigned int index = (unsigned int)(e)-1;
+  Event[index].signalled = 1;
+  if(Event[index].waiting_p != NULL) {
+    //change waiting task's state to READY
+    Event[index].waiting_p->state = READY;
+    Event[index].waiting_p = NULL;
+    Event[index].signalled = 0;
+  }
+}
 
 
 
@@ -423,6 +479,16 @@ static void Next_Kernel_Request() {
         break;
       case UNLOCK_MUTEX:
         Kernel_Unlock_Mutex(Cp->mid, (PD*) Cp);
+        break;
+      case CREATE_EVENT:
+        Kernel_Create_Event();
+        break;
+      case EVENT_WAIT:
+        Cp->state = BLOCKED;
+        Kernel_Event_Wait((PD*) Cp);
+        break;
+      case EVENT_SIGNAL:
+        Kernel_Event_Signal(Cp->e);
         break;
       default:
         /* Houston! we have a problem here! */
@@ -661,16 +727,34 @@ void Mutex_Unlock(MUTEX m){
   *================
   */
 
+/* Sends a request to the kernal for the creation of an event
+* Returns event id
+*/
 EVENT Event_Init(void){
-
+  Disable_Interrupt();
+  Events++;
+  Cp->request = CREATE_EVENT;
+  Enter_Kernel();
+  return (EVENT)Events;
 };
 
+
+/* This function */
 void Event_Wait(EVENT e){
-
+  Disable_Interrupt();
+  Cp->e = e;
+  Cp->request = EVENT_WAIT;
+  Enter_Kernel();
 };
 
-void Event_Signal(EVENT e){
-
+/* When an event is signalled, it wakes up a waiting task if there is one, otherwise it is recorded
+*only one outstanding signal on an event is recorded, hence any subsequent signals on the same event will be lost
+*/
+void Event_Signal(EVENT event){
+  Disable_Interrupt();
+  Cp->e = event;
+  Cp->request = EVENT_SIGNAL;
+  Enter_Kernel();
 };
 
 
@@ -682,6 +766,7 @@ void main() {
   int x;
   Tasks = 0;
   Mutexes = 0;
+  Events = 0;
   KernelActive = 0;
   NextP = 0;
 
@@ -691,9 +776,10 @@ void main() {
     Process[x].state = DEAD;
   }
 
-  //Reminder: Clear the memory for the m on creation.
+  //Reminder: Clear the memory for the m and events on creation.
   for (x = 0; x < MAXMUTEX; x++) {
     memset(&(Mutex[x]),0,sizeof(MD));
+    memset(&(Event[x]),0,sizeof(ED));
     Mutex[x].state = UNLOCKED;
   }
 

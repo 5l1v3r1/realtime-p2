@@ -1,3 +1,5 @@
+/*** Tests suspending and resuming a task from another task **/
+
 #include "os.h"
 #include <avr/io.h>
 #include <avr/interrupt.h>
