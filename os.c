@@ -21,6 +21,16 @@ void debug_flash(){
   _delay_ms(500);
 }
 
+void err_flash(){
+  PORTB = 0x80;
+  _delay_ms(500);
+  PORTB = 0x00;
+  _delay_ms(500);
+}
+
+
+
+
 
 /*===========
   * RTOS Internal
@@ -66,6 +76,23 @@ extern void Enter_Kernel();
 #define Disable_Interrupt()		asm volatile ("cli"::)
 #define Enable_Interrupt()		asm volatile ("sei"::)
   
+typedef enum errnum {
+  E_DEFAULT = 0,
+  E_EXCEEDS_MAXEVENT,
+  E_EXCEEDS_MAXMUTEX,
+  E_EXCEEDS_MAXPROCESS,
+  E_DEADLOCK,
+  E_DNE
+} ERR_NO;
+
+volatile static ERR_NO err_no;
+
+void error() {
+  int i;
+  for(i = 0; i < err_no+1; i++) {
+    err_flash;
+  }
+}
 
 /**
   *  This is the set of states that a task can be in at any given time.
@@ -244,7 +271,11 @@ static ED Event[MAXEVENT];
 
 
 void Kernel_Create_Mutex(PRIORITY priority){
-  if(Mutexes >= MAXMUTEX) return; /* prevents creation of too many mutexes */
+  if(Mutexes >= MAXMUTEX) {
+    err_no = E_EXCEEDS_MAXMUTEX;
+    error();
+    return; /* prevents creation of too many mutexes */
+  }
 
   Mutex[Mutexes].state = UNLOCKED;
   Mutex[Mutexes].id = Mutexes;
@@ -255,7 +286,9 @@ void Kernel_Create_Mutex(PRIORITY priority){
 };
 
 void Kernel_Lock_Mutex(MUTEX mid, PD* Ct){
-  if(Mutex[mid].id == MAXMUTEX || mid >= MAXMUTEX) {
+  if(mid >= MAXMUTEX || Mutex[mid].id == MAXMUTEX) {
+    err_no = E_DNE;
+    error();
     return;
   }
 
@@ -283,6 +316,8 @@ void Kernel_Lock_Mutex(MUTEX mid, PD* Ct){
 
 void Kernel_Unlock_Mutex(MUTEX mid, PD* Ct){
   if(Mutex[mid].id == MAXMUTEX || mid >= MAXMUTEX) {
+    err_no = E_DNE;
+    error();
     return;
   }
 
@@ -310,7 +345,11 @@ void Kernel_Unlock_Mutex(MUTEX mid, PD* Ct){
 
 /* Create event */
 void Kernel_Create_Event() {
-  if(Events >= MAXEVENT) return;
+  if(Events >= MAXEVENT) {
+    err_no = E_EXCEEDS_MAXEVENT;
+    error();
+    return;
+  }
 
   Event[Events].id = Events;
   Event[Events].signalled = 0;
