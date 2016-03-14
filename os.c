@@ -175,6 +175,7 @@ volatile static unsigned int FreeTaskId;
 /** 1 if kernel has been started; 0 otherwise. */
 volatile static unsigned int KernelActive;  
 
+
 /*
   * This internal kernel function is a part of the "scheduler". It chooses the 
   * next task to run, i.e., Cp.
@@ -198,6 +199,27 @@ static void Dispatch(){
   Cp->state = RUNNING;
 
   NextP = (NextP + 1) % MAXTHREAD;
+}
+
+/*
+  * This checks if any tasks are ready and a higher priority than the current task, return 1 if true
+  */
+static int Preemptive_Check(){
+  PRIORITY current_priority = Cp->priority;
+
+  int i;
+  for(i = 0; i < MAXTHREAD; i++){
+    if(Process[i].state == READY && Process[i].sus != 1 && Process[i].priority < current_priority){
+      current_priority = Process[i].priority;
+    }
+  }
+
+  if(current_priority < Cp->priority){
+    Cp->state = READY;
+    return 1;
+  }
+
+  return 0;
 }
 
 /**
@@ -508,6 +530,7 @@ static void Next_Kernel_Request() {
     switch(Cp->request){
       case CREATE:
         Kernel_Create_Task(Cp->code, Cp->create_priority, Cp->create_argument);
+        if(Preemptive_Check()) Dispatch();
         break;
       case SUSPEND:
         Cp->sus = 1;
@@ -544,6 +567,7 @@ static void Next_Kernel_Request() {
         break;
       case UNLOCK_MUTEX:
         Kernel_Unlock_Mutex(Cp->mid, (PD*) Cp);
+        if(Preemptive_Check()) Dispatch();
         break;
       case CREATE_EVENT:
         Kernel_Create_Event();
@@ -553,6 +577,7 @@ static void Next_Kernel_Request() {
         break;
       case EVENT_SIGNAL:
         Kernel_Event_Signal(Cp->e);
+        if(Preemptive_Check()) Dispatch();
         break;
       default:
         /* Houston! we have a problem here! */

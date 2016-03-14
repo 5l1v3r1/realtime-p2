@@ -74,7 +74,7 @@ test_4: test_4.c
 	$(CC) $(ELFFLAGS) img.elf cswitch.o os.o test_4.o
 
 
-test: compile test_1 hex load
+test: compile test_pre_empt hex load
 
 clean:
 	rm -f *.elf *.o *.hex
