@@ -4,7 +4,7 @@
 #include <avr/io.h>
 #include <avr/interrupt.h>
 
-unsigned int does_not_exist = 0;
+unsigned int does_not_exist = 5;
 
 void Task_1() {
 	Task_Suspend(does_not_exist);

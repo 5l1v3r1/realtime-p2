@@ -21,12 +21,7 @@ void debug_flash(){
   _delay_ms(500);
 }
 
-void err_flash(){
-  PORTB = 0x80;
-  _delay_ms(500);
-  PORTB = 0x00;
-  _delay_ms(500);
-}
+
 
 
 
@@ -78,20 +73,25 @@ extern void Enter_Kernel();
   
 typedef enum errnum {
   E_DEFAULT = 0,
-  E_EXCEEDS_MAXEVENT,
-  E_EXCEEDS_MAXMUTEX,
-  E_EXCEEDS_MAXPROCESS,
-  E_DEADLOCK,
-  E_DNE
+  E_EXCEEDS_MAXEVENT = 1,
+  E_EXCEEDS_MAXMUTEX = 2,
+  E_EXCEEDS_MAXPROCESS = 3,
+  E_DEADLOCK = 4,
+  E_DNE = 5
 } ERR_NO;
 
-volatile static ERR_NO err_no;
+volatile static ERR_NO err_no = E_DEFAULT;
 
 void error() {
+  
   int i;
   for(i = 0; i < err_no+1; i++) {
-    err_flash;
+    PORTB = 0x20;
+  _delay_ms(100);
+  PORTB = 0x00;
+  _delay_ms(100);
   }
+  _delay_ms(400);
 }
 
 /**
@@ -362,6 +362,11 @@ void Kernel_Create_Event() {
 void Kernel_Event_Wait(PD* Ct) {
   unsigned int index = (unsigned int)(Ct->e);
 
+  if(index >= MAXEVENT || Event[index].id == MAXEVENT) {
+    err_no = E_DNE;
+    error();
+  }
+
   // If another task is waiting on the event NoOp
   if(Event[index].waiting_p != NULL) {
     Ct->state = RUNNING;
@@ -384,6 +389,11 @@ void Kernel_Event_Wait(PD* Ct) {
 */
 void Kernel_Event_Signal(EVENT e) {
   unsigned int index = (unsigned int)(e);
+
+  if(index >= MAXEVENT || Event[index].id == MAXEVENT) {
+    err_no = E_DNE;
+    error();
+  }
 
   Event[index].signalled = 1;
   if(Event[index].waiting_p != NULL) {
@@ -469,7 +479,11 @@ void Kernel_Create_Task_At( PD *p, void (*f)(void), PRIORITY py, int arg)
   *  Create a new task
   */
 static void Kernel_Create_Task(void (*f)(void), PRIORITY py, int arg) {
-   if (Tasks == MAXPROCESS) return;  /* Too many tasks! */
+   if (Tasks == MAXPROCESS) {
+    err_no = E_EXCEEDS_MAXPROCESS;
+    error();
+    return;  /* Too many tasks! */
+   }
 
    /* find a DEAD PD that we can use*/
    for(FreeTaskId = 0; FreeTaskId< MAXPROCESS; FreeTaskId++) {
@@ -640,6 +654,9 @@ void Task_Suspend( PID p ){
         break;
       }
     }
+    /* if there are no tasks with this PID then set err_no to does not exist */
+    err_no = E_DNE;
+    error();
   }
 };
 
@@ -655,6 +672,9 @@ void Task_Resume( PID p ){
       break;
     }
   }
+  /* if there are no tasks with this PID then set err_no to does not exist */
+  err_no = E_DNE;
+  error();
 };
 
 /* Sleep code

@@ -48,7 +48,11 @@ test_event: test_event.c
 	$(CC) $(FLAGS) test_event.c
 	$(CC) $(ELFFLAGS) img.elf cswitch.o os.o test_event.o
 
-test: compile test_mutex hex load
+test_error_unrecoverable: test_error_unrecoverable1.c
+	$(CC) $(FLAGS) test_error_unrecoverable1.c
+	$(CC) $(ELFFLAGS) img.elf cswitch.o os.o test_error_unrecoverable1.o
+
+test: compile test_error_unrecoverable hex load
 
 clean:
 	rm -f *.elf *.o *.hex
