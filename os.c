@@ -11,21 +11,6 @@
 
 typedef void (*voidfuncptr) (void);      /* pointer to void f(void) */ 
 
-#define WORKSPACE     256
-#define MAXPROCESS   4
-
-void debug_flash(){
-  PORTB = 0x60;
-  _delay_ms(500);
-  PORTB = 0x00;
-  _delay_ms(500);
-}
-
-
-
-
-
-
 
 /*===========
   * RTOS Internal
@@ -157,7 +142,7 @@ typedef struct ProcessDescriptor
   * This table contains ALL process descriptors. It doesn't matter what
   * state a task is in.
   */
-static PD Process[MAXPROCESS];
+static PD Process[MAXTHREAD];
 
 /**
   * The process descriptor of the currently RUNNING task.
@@ -198,21 +183,21 @@ static void Dispatch(){
   PRIORITY high_priority = 10;
 
   int i;
-  for(i = 0; i < MAXPROCESS; i++){
+  for(i = 0; i < MAXTHREAD; i++){
     if(Process[i].state == READY && Process[i].sus != 1 && Process[i].priority < high_priority){
       high_priority = Process[i].priority;
     }
   }
 
   while(Process[NextP].state != READY || Process[NextP].sus == 1 || Process[NextP].priority > high_priority) {
-    NextP = (NextP + 1) % MAXPROCESS;
+    NextP = (NextP + 1) % MAXTHREAD;
   }
 
   Cp = &(Process[NextP]);
   CurrentSp = Cp->sp;
   Cp->state = RUNNING;
 
-  NextP = (NextP + 1) % MAXPROCESS;
+  NextP = (NextP + 1) % MAXTHREAD;
 }
 
 /**
@@ -479,14 +464,15 @@ void Kernel_Create_Task_At( PD *p, void (*f)(void), PRIORITY py, int arg)
   *  Create a new task
   */
 static void Kernel_Create_Task(void (*f)(void), PRIORITY py, int arg) {
-   if (Tasks == MAXPROCESS) {
+   if (Tasks == MAXTHREAD) {
     err_no = E_EXCEEDS_MAXPROCESS;
     error();
     return;  /* Too many tasks! */
    }
 
+
    /* find a DEAD PD that we can use*/
-   for(FreeTaskId = 0; FreeTaskId< MAXPROCESS; FreeTaskId++) {
+   for(FreeTaskId = 0; FreeTaskId< MAXTHREAD; FreeTaskId++) {
        if(Process[FreeTaskId].state == DEAD) break;
    }
 
@@ -605,7 +591,6 @@ PID Task_Create( void (*f)(void), PRIORITY py, int arg){
   } else { 
     Kernel_Create_Task(f, py, arg);
   }
-
   return FreeTaskId;
 }
 
@@ -648,7 +633,7 @@ void Task_Suspend( PID p ){
       Enable_Interrupt();
   } else {
     int x;
-    for(x=0; x < MAXPROCESS; x++) {
+    for(x=0; x < MAXTHREAD; x++) {
       if(Process[x].id == p) {
         Process[x].sus = 1;
         break;
@@ -666,7 +651,7 @@ void Task_Suspend( PID p ){
 */
 void Task_Resume( PID p ){
   int x;
-  for(x=0; x < MAXPROCESS; x++) {
+  for(x=0; x < MAXTHREAD; x++) {
     if(Process[x].id == p) {
       Process[x].sus = 0;
       break;
@@ -749,7 +734,7 @@ void enter_sleep_queue(){
   new_sleep_node->pd = (PD*) Cp;
   new_sleep_node->next = sleep_queue_head;
   new_sleep_node->sleep_actual_count = 0;
-  new_sleep_node->sleep_expected_count = (int)(Cp->sleep_time/MSECPERTICK); 
+  new_sleep_node->sleep_expected_count = (int)(Cp->sleep_time); 
   sleep_queue_head = new_sleep_node;
 
   // Control registers
@@ -830,7 +815,7 @@ EVENT Event_Init(void){
 *
 */
 void Event_Wait(EVENT e){
-  if(e == MAXEVENT) return;
+  if(e < 0 || e >= MAXEVENT || Event[e].id == MAXEVENT) return;
   Disable_Interrupt();
   Cp->e = e;
   Cp->request = EVENT_WAIT;
@@ -841,7 +826,7 @@ void Event_Wait(EVENT e){
 *only one outstanding signal on an event is recorded, hence any subsequent signals on the same event will be lost
 */
 void Event_Signal(EVENT e){
-  if(e == MAXEVENT) return;
+  if(e < 0 || e >= MAXEVENT || Event[e].id == MAXEVENT) return;
   Disable_Interrupt();
   Cp->e = e;
   Cp->request = EVENT_SIGNAL;
@@ -863,7 +848,7 @@ void main() {
   DDRB = 0xF0;
 
   //Reminder: Clear the memory for the task on creation.
-  for (x = 0; x < MAXPROCESS; x++) {
+  for (x = 0; x < MAXTHREAD; x++) {
     memset(&(Process[x]),0,sizeof(PD));
     Process[x].state = DEAD;
   }

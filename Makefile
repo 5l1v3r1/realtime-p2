@@ -44,6 +44,10 @@ test_mutex: test_mutex.c
 	$(CC) $(FLAGS) test_mutex.c
 	$(CC) $(ELFFLAGS) img.elf cswitch.o os.o test_mutex.o
 
+test_mutex_dne: test_mutex_dne.c
+	$(CC) $(FLAGS) test_mutex_dne.c
+	$(CC) $(ELFFLAGS) img.elf cswitch.o os.o test_mutex_dne.o
+
 test_event: test_event.c
 	$(CC) $(FLAGS) test_event.c
 	$(CC) $(ELFFLAGS) img.elf cswitch.o os.o test_event.o
@@ -52,7 +56,25 @@ test_error_unrecoverable: test_error_unrecoverable1.c
 	$(CC) $(FLAGS) test_error_unrecoverable1.c
 	$(CC) $(ELFFLAGS) img.elf cswitch.o os.o test_error_unrecoverable1.o
 
-test: compile test_error_unrecoverable hex load
+
+test_1: test_1.c
+	$(CC) $(FLAGS) test_1.c
+	$(CC) $(ELFFLAGS) img.elf cswitch.o os.o test_1.o
+
+test_2: test_2.c
+	$(CC) $(FLAGS) test_2.c
+	$(CC) $(ELFFLAGS) img.elf cswitch.o os.o test_2.o
+
+test_3: test_3.c
+	$(CC) $(FLAGS) test_3.c
+	$(CC) $(ELFFLAGS) img.elf cswitch.o os.o test_3.o
+
+test_4: test_4.c
+	$(CC) $(FLAGS) test_4.c
+	$(CC) $(ELFFLAGS) img.elf cswitch.o os.o test_4.o
+
+
+test: compile test_1 hex load
 
 clean:
 	rm -f *.elf *.o *.hex
