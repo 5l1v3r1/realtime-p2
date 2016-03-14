@@ -8,12 +8,11 @@
 MUTEX shared_mutex;
 
 void Task_1(){
-  for(;;){
-    PORTB = 0x10;
-    _delay_ms(200);
-    PORTB = 0x00;
-    _delay_ms(200);
-  }
+  PORTB = 0x10;
+  _delay_ms(200);
+  PORTB = 0x00;
+  _delay_ms(200);
+  Task_Yield();
 }
 
 void Task_3(){
@@ -23,10 +22,12 @@ void Task_3(){
   _delay_ms(200);
   PORTB = 0x00;
   _delay_ms(200);
+  Mutex_Unlock(shared_mutex);
+  Task_Yield();
 }
 
 void Task_2(){
-  //Lock the shared mutex
+  //Lock the shared mutex, ensures that task_2 runs first due to priority inheritence
   Mutex_Lock(shared_mutex);
 
   //Create Task_3 
@@ -39,12 +40,16 @@ void Task_2(){
   //Yield to highest priority task, should be task 1 since it inherits Task_3's priority
   Task_Yield();
 
-  for(;;){
-    PORTB = 0x80;
-    _delay_ms(200);
-    PORTB = 0x00;
-    _delay_ms(200);
-  }
+  PORTB = 0x80;
+  _delay_ms(200);
+  PORTB = 0x00;
+  _delay_ms(200);
+
+  //Unlock the mutex
+  Mutex_Unlock(shared_mutex);
+  
+  //Yield should send to task 3
+  Task_Yield();
 }
 
 int main() {

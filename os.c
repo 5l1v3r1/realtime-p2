@@ -228,7 +228,6 @@ void Kernel_Create_Mutex(PRIORITY priority){
 
 void Kernel_Lock_Mutex(MUTEX mid, PD* Ct){
   if(Mutex[mid].state == UNLOCKED || Ct->id == Mutex[mid].owner->id){
-    debug_flash();
     Ct->state = READY;
     Mutex[mid].owner = Ct;
     Mutex[mid].original_priority = Ct->priority;
