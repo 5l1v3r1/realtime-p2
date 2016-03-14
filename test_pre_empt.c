@@ -41,8 +41,8 @@ int a_main() {
   DDRB = 0xF0;
   PORTB = 0x00;
 
-  Task_Create(Task_4, 0, 0); // Pin 12
-  Task_Create(Task_3, 1, 1); // Pin 12
-  Task_Create(Task_2, 2, 2); // Pin 12
-  Task_Create(Task_1, 3, 3); // Pin 12
+  Task_Create(Task_1, 0, 3); // Pin 12
+  Task_Create(Task_3, 2, 1); // Pin 12
+  Task_Create(Task_2, 1, 2); // Pin 12
+  Task_Create(Task_4, 3, 0); // Pin 12
 }

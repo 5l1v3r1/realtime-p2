@@ -16,9 +16,9 @@ typedef void (*voidfuncptr) (void);      /* pointer to void f(void) */
 
 void debug_flash(){
   PORTB = 0x60;
-  _delay_ms(100);
+  _delay_ms(500);
   PORTB = 0x00;
-  _delay_ms(100);
+  _delay_ms(500);
 }
 
 
@@ -156,6 +156,9 @@ volatile unsigned char *CurrentSp;
 
 /** index to next task to run */
 volatile static unsigned int NextP;  
+
+/** index to next task id available*/
+volatile static unsigned int FreeTaskId;  
 
 /** 1 if kernel has been started; 0 otherwise. */
 volatile static unsigned int KernelActive;  
@@ -386,7 +389,7 @@ void Kernel_Create_Task_At( PD *p, void (*f)(void), PRIORITY py, int arg)
   p->sp = sp;    /* stack pointer into the "workSpace" */
   p->code = f;   /* function to be executed as a task */
   p->request = NONE;
-  p->id = (PID) Tasks;
+  p->id = (PID) FreeTaskId;
   p->argument = arg;
   p->priority = py;
 
@@ -399,19 +402,15 @@ void Kernel_Create_Task_At( PD *p, void (*f)(void), PRIORITY py, int arg)
 /**
   *  Create a new task
   */
-static void Kernel_Create_Task(void (*f)(void), PRIORITY py, int arg) 
-{
-   int x;
-
+static void Kernel_Create_Task(void (*f)(void), PRIORITY py, int arg) {
    if (Tasks == MAXPROCESS) return;  /* Too many task! */
 
    /* find a DEAD PD that we can use  */
-   for (x = 0; x < MAXPROCESS; x++) {
-       if (Process[x].state == DEAD) break;
+   for (FreeTaskId = 0; FreeTaskId < MAXPROCESS; FreeTaskId++) {
+       if (Process[FreeTaskId].state == DEAD) break;
    }
 
-   ++Tasks;
-   Kernel_Create_Task_At( &(Process[x]), f, py, arg);
+   Kernel_Create_Task_At(&(Process[FreeTaskId]), f, py, arg);
 }
 
 
@@ -515,6 +514,7 @@ void OS_Abort(void);
   * Create task with given priority and argument, return the process ID
   */
 PID Task_Create( void (*f)(void), PRIORITY py, int arg){
+
   if(KernelActive){
     Disable_Interrupt();
     Cp->request = CREATE;
@@ -527,7 +527,7 @@ PID Task_Create( void (*f)(void), PRIORITY py, int arg){
     Kernel_Create_Task(f, py, arg);
   }
 
-  return Cp->id;
+  return FreeTaskId;
 }
 
 /**
@@ -560,6 +560,7 @@ int Task_GetArg(void){
 * Does nothing if the task is already suspended
 */
 void Task_Suspend( PID p ){
+
   /* if the task to be suspended is currently running, then let the kernel get a new task running */
   if(Cp->id == p && KernelActive) {
       Disable_Interrupt();
@@ -611,7 +612,7 @@ void sleep_delete(PID id){
   temp = sleep_queue_head;
   
   while(temp!=NULL){
-    if(temp->pd->id==id){
+    if(temp->pd->id == id){
       if(temp==sleep_queue_head){
         sleep_queue_head=temp->next;
         free(temp);
@@ -639,8 +640,6 @@ ISR(TIMER1_COMPA_vect){
   struct sleep_node *next_sleep_node = curr_sleep_node->next;
   while(curr_sleep_node != NULL){
     curr_sleep_node->sleep_actual_count++;
-
-    //THE LINE BELOW TOOK ME 2 HOURS TO DEBUG, #MyLifeIsAverage
     next_sleep_node = curr_sleep_node->next;
 
     if(curr_sleep_node->sleep_actual_count >= curr_sleep_node->sleep_expected_count){
@@ -699,10 +698,10 @@ MUTEX Mutex_Init(void){
     Disable_Interrupt();
     Cp->request = CREATE_MUTEX;
     Enter_Kernel();
-    return (Mutexes++);
+    return Mutexes++;
   }else{
     Kernel_Create_Mutex(10);
-    return (Mutexes++);
+    return Mutexes++;
   }
 };
 
@@ -769,6 +768,7 @@ void main() {
   Events = 0;
   KernelActive = 0;
   NextP = 0;
+  DDRB = 0xF0;
 
   //Reminder: Clear the memory for the task on creation.
   for (x = 0; x < MAXPROCESS; x++) {
@@ -783,11 +783,9 @@ void main() {
     Mutex[x].state = UNLOCKED;
   }
 
-  Task_Create(a_main, 0, 0);  
+  Task_Create(a_main, 0, 0);
 
-  if((! KernelActive) && (Tasks > 0)) {
-    Disable_Interrupt();
-    KernelActive = 1;
-    Next_Kernel_Request();
-  }
+  Disable_Interrupt();
+  KernelActive = 1;
+  Next_Kernel_Request();
 }
