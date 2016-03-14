@@ -52,12 +52,10 @@ void Task_2(){
   Task_Yield();
 }
 
-int main() {
+void a_main() {
   DDRB = 0xF0;
   PORTB = 0x00;
 
-  OS_Init();
   shared_mutex = Mutex_Init();
   Task_Create(Task_2, 3, 0); // Pin 12
-  OS_Start();
 }

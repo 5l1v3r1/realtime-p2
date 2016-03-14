@@ -44,6 +44,8 @@ void debug_flash(){
 extern void CSwitch();
 extern void Exit_Kernel();    /* this is the same as CSwitch() */
 
+extern void a_main();
+
 /* Prototype */
 void Task_Terminate(void);
 void enter_sleep_queue();
@@ -676,7 +678,7 @@ void Event_Signal(EVENT e){
 * This function initializes the RTOS and must be called before any other
 * system calls.
 */
-void OS_Init() {
+void main() {
   int x;
   Tasks = 0;
   Mutexes = 0;
@@ -694,12 +696,9 @@ void OS_Init() {
     memset(&(Mutex[x]),0,sizeof(MD));
     Mutex[x].state = UNLOCKED;
   }
-}
 
-/**
-* This function starts the RTOS after creating a few tasks.
-*/
-void OS_Start(){
+  Task_Create(a_main, 0, 0);  
+
   if((! KernelActive) && (Tasks > 0)) {
     Disable_Interrupt();
     KernelActive = 1;
