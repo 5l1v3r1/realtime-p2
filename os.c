@@ -429,10 +429,9 @@ void Kernel_Create_Task_At( PD *p, void (*f)(void), PRIORITY py, int arg)
 static void Kernel_Create_Task(void (*f)(void), PRIORITY py, int arg) {
    if (Tasks == MAXPROCESS) return;  /* Too many tasks! */
 
-   /* find a DEAD PD that we can use starting from the index after the last dispatched process */
-  FreeTaskId = NextP;
-   while(Process[FreeTaskId].state != DEAD) {
-       FreeTaskId = (FreeTaskId + 1) % MAXPROCESS;
+   /* find a DEAD PD that we can use*/
+   for(FreeTaskId = 0; FreeTaskId< MAXPROCESS; FreeTaskId++) {
+       if(Process[FreeTaskId].state == DEAD) break;
    }
 
    Kernel_Create_Task_At(&(Process[FreeTaskId]), f, py, arg);
