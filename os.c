@@ -294,13 +294,17 @@ void Kernel_Create_Mutex(PRIORITY priority){
 
 void Kernel_Lock_Mutex(MUTEX mid, PD* Ct){
   
-
+  // If Mutex is unlocked or the calling task is the owner
   if(Mutex[mid].state == UNLOCKED || Ct->id == Mutex[mid].owner->id){
+    
+    // Set the Mutex Descriptor
     Ct->state = READY;
     Mutex[mid].owner = Ct;
     Mutex[mid].original_priority = Ct->priority;
     Mutex[mid].lock_count++;
     Mutex[mid].state = LOCKED;
+  
+  // Else Block the calling task and add it to the wait list 
   }else{
     Ct->state = BLOCKED;
     struct mutex_node *new_mutex_node = (struct mutex_node *) malloc(sizeof(struct mutex_node)); 
@@ -308,7 +312,7 @@ void Kernel_Lock_Mutex(MUTEX mid, PD* Ct){
     new_mutex_node->next = Mutex[mid].wait_queue;
     Mutex[mid].wait_queue = new_mutex_node;
     
-    //Priority Inheritence
+    //Inherit priority if higher priority task is waiting 
     if(Ct->priority < Mutex[mid].owner->priority){
       Mutex[mid].owner->priority = Ct->priority; 
     }
@@ -657,9 +661,12 @@ void Task_Resume( PID p ){
       break;
     }
   }
+
   /* if there are no tasks with this PID then set err_no to does not exist */
-  err_no = E_DNE;
-  error();
+  if(x== MAXTHREAD){
+    err_no = E_DNE;
+    error();
+  }
 };
 
 /* Sleep code
