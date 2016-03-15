@@ -26,9 +26,6 @@ void Task_1() {
 	//4. Signal to Task_2 waiting on blink_increment
 	Event_Signal(blink_increment);
 
-	//5. Yield to now READY Task_2
-	Task_Yield();
-
 	//8. Run and increment the blinks
 	int i;
 	for(i = 0; i<blinks; i++) {

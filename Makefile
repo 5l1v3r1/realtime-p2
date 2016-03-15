@@ -28,9 +28,13 @@ hex: img.elf
 load:
 	$(LOAD) $(LOADFLAGS)
 
-test_sus: test_sus_dne.c
+test_sus_dne: test_sus_dne.c
 	$(CC) $(FLAGS) test_sus_dne.c
 	$(CC) $(ELFFLAGS) img.elf cswitch.o os.o test_sus_dne.o
+
+test_sus: test_sus_resume.c
+	$(CC) $(FLAGS) test_sus_resume.c
+	$(CC) $(ELFFLAGS) img.elf cswitch.o os.o test_sus_resume.o
 
 test_sleep: test_sleep.c
 	$(CC) $(FLAGS) test_sleep.c
@@ -52,9 +56,9 @@ test_event: test_event.c
 	$(CC) $(FLAGS) test_event.c
 	$(CC) $(ELFFLAGS) img.elf cswitch.o os.o test_event.o
 
-test_error_unrecoverable: test_error_unrecoverable1.c
-	$(CC) $(FLAGS) test_error_unrecoverable1.c
-	$(CC) $(ELFFLAGS) img.elf cswitch.o os.o test_error_unrecoverable1.o
+test_switch: test_task_switch.c
+	$(CC) $(FLAGS) test_task_switch.c
+	$(CC) $(ELFFLAGS) img.elf cswitch.o os.o test_task_switch.o
 
 
 test_1: test_1.c
@@ -75,6 +79,3 @@ test_4: test_4.c
 
 
 test: compile test_sleep hex load
-
-clean:
-	rm -f *.elf *.o *.hex

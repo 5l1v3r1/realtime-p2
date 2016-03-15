@@ -70,10 +70,10 @@ void error() {
   
   int i;
   for(i = 0; i < err_no+1; i++) {
-    PORTB = 0x20;
-    _delay_ms(100);
+    PORTB = 0x80;
+    _delay_ms(200);
     PORTB = 0x00;
-    _delay_ms(100);
+    _delay_ms(200);
   }
   _delay_ms(400);
 }
@@ -644,8 +644,10 @@ void Task_Suspend( PID p ){
       }
     }
     /* if there are no tasks with this PID then set err_no to does not exist */
-    err_no = E_DNE;
-    error();
+    if(x == MAXTHREAD) {
+      err_no = E_DNE;
+      error();
+    }
   }
 };
 
@@ -663,7 +665,7 @@ void Task_Resume( PID p ){
   }
 
   /* if there are no tasks with this PID then set err_no to does not exist */
-  if(x== MAXTHREAD){
+  if(x == MAXTHREAD) {
     err_no = E_DNE;
     error();
   }
@@ -713,10 +715,12 @@ void Task_Sleep(TICK t){
 };
 
 ISR(TIMER1_COMPA_vect){
+  PORTB = 0x80;
   // Initialize linked list pointers
   struct sleep_node *curr_sleep_node = sleep_queue_head;
   struct sleep_node *next_sleep_node = curr_sleep_node->next;
-  
+  int id = MAXTHREAD;
+
   // For each node in linked list
   while(curr_sleep_node != NULL){
 
@@ -728,11 +732,20 @@ ISR(TIMER1_COMPA_vect){
 
     // If interrupt count is >= what is expected resume task and remove from list
     if(curr_sleep_node->sleep_actual_count >= curr_sleep_node->sleep_expected_count){
-      Task_Resume(curr_sleep_node->pd->id);
-      sleep_delete(curr_sleep_node->pd->id);
+      id = curr_sleep_node->pd->id;
+      Task_Resume(id);
+      sleep_delete(id);
     }
 
     curr_sleep_node = next_sleep_node;
+  }
+
+  // If there is a task
+  if(id != MAXTHREAD){
+    if(Preemptive_Check()){
+      Cp->request = NEXT;
+      Enter_Kernel();
+    };
   }
 
   // If nothing left in the list turn off timer interrupts
@@ -741,6 +754,7 @@ ISR(TIMER1_COMPA_vect){
   }else{
     TCNT1   = 0;
   }
+  PORTB = 0x00;
 }
 
 void enter_sleep_queue(){
@@ -779,13 +793,14 @@ void enter_sleep_queue(){
 
 
 MUTEX Mutex_Init(void){
-  if(Mutexes >= MAXMUTEX) {
-    err_no = E_EXCEEDS_MAXMUTEX;
-    error();
-    return; /* prevents creation of too many mutexes */
-  }
+  
   if(KernelActive){
     Disable_Interrupt();
+    if(Mutexes >= MAXMUTEX) {
+      err_no = E_EXCEEDS_MAXMUTEX;
+      error();
+      return; /* prevents creation of too many mutexes */
+    }
     Cp->request = CREATE_MUTEX;
     Enter_Kernel();
     return Mutexes++;
@@ -796,24 +811,28 @@ MUTEX Mutex_Init(void){
 };
 
 void Mutex_Lock(MUTEX m){
-  if(m < 0 || m >= MAXMUTEX || Mutex[m].id == MAXMUTEX) {
-    err_no = E_DNE;
-    error();
-    return;
-  }
+  
   Disable_Interrupt();
+    if(m < 0 || m >= MAXMUTEX || Mutex[m].id == MAXMUTEX) {
+      err_no = E_DNE;
+      error();
+      Enable_Interrupt();
+      return;
+  }
   Cp->request = LOCK_MUTEX;
   Cp->mid = m;
   Enter_Kernel();
 };
 
 void Mutex_Unlock(MUTEX m){
+  
+  Disable_Interrupt();
   if(m < 0 || m >= MAXMUTEX || Mutex[m].id == MAXMUTEX) {
     err_no = E_DNE;
     error();
+    Enable_Interrupt();
     return;
   }
-  Disable_Interrupt();
   Cp->request = UNLOCK_MUTEX;
   Cp->mid = m;
   Enter_Kernel();
@@ -850,12 +869,14 @@ EVENT Event_Init(void){
 *
 */
 void Event_Wait(EVENT e){
+  
+  Disable_Interrupt();
   if(e < 0 || e >= MAXEVENT || Event[e].id == MAXEVENT) {
-    err_no = E_DNE;
+    err_no = E_DNE;  
     error();
+    Enable_Interrupt();
     return;
   }
-  Disable_Interrupt();
   Cp->e = e;
   Cp->request = EVENT_WAIT;
   Enter_Kernel();
@@ -865,12 +886,15 @@ void Event_Wait(EVENT e){
 *only one outstanding signal on an event is recorded, hence any subsequent signals on the same event will be lost
 */
 void Event_Signal(EVENT e){
+  
+  Disable_Interrupt();
   if(e < 0 || e >= MAXEVENT || Event[e].id == MAXEVENT) {
     err_no = E_DNE;
+
     error();
+    Enable_Interrupt();
     return;
   }
-  Disable_Interrupt();
   Cp->e = e;
   Cp->request = EVENT_SIGNAL;
   Enter_Kernel();

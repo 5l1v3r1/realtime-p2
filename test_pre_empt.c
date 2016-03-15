@@ -57,6 +57,6 @@ void Task_5(){
 int a_main() {
   DDRB = 0xF0;
   PORTB = 0x00;
-
+  _delay_ms(3000);
   int task_5_id = Task_Create(Task_5, 5, 5); 
 }
