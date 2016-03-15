@@ -61,8 +61,7 @@ typedef enum errnum {
   E_EXCEEDS_MAXEVENT = 1,
   E_EXCEEDS_MAXMUTEX = 2,
   E_EXCEEDS_MAXPROCESS = 3,
-  E_DEADLOCK = 4,
-  E_DNE = 5
+  E_DNE = 4
 } ERR_NO;
 
 volatile static ERR_NO err_no = E_DEFAULT;
