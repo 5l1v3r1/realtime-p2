@@ -72,9 +72,9 @@ void error() {
   int i;
   for(i = 0; i < err_no+1; i++) {
     PORTB = 0x20;
-  _delay_ms(100);
-  PORTB = 0x00;
-  _delay_ms(100);
+    _delay_ms(100);
+    PORTB = 0x00;
+    _delay_ms(100);
   }
   _delay_ms(400);
 }
@@ -111,30 +111,35 @@ typedef enum kernel_request_type
 
 /**
   * Each task is represented by a process descriptor, which contains all
-  * relevant information about this task. For convenience, we also store
-  * the task's stack, i.e., its workspace, in here.
+  * relevant information about this task. Holds relevant information for 
+  * preforming kernel requests
   */
-typedef struct ProcessDescriptor 
-{
-   unsigned char *sp;   /* stack pointer into the "workSpace" */
-   unsigned char workSpace[WORKSPACE]; 
-   PROCESS_STATES state;
-   TICK sleep_time;
+typedef struct ProcessDescriptor {
+  // ID, Kernel Request, and State of the process
+  PID id;
+  KERNEL_REQUEST_TYPE request;
+  PROCESS_STATES state;
+
+  // Priority and argument of process assigned on creation
+  int argument;
+  PRIORITY priority;
+  
+  //Suspended Flag and Number of Ticks to sleep
   int sus;
+  TICK sleep_time;
+  
+  //Mutex and event id's used for kernel requests
+  MUTEX mid;
+  EVENT e;
 
-   PID id;
-   
-   PRIORITY priority;
-   int argument;
-
-    MUTEX mid;
-   EVENT e;
-
-   PRIORITY create_priority;
+  //Argument and priority of task to create used for kernel requests
   int create_argument;
-
-   voidfuncptr  code;   /* function to be executed as a task */
-   KERNEL_REQUEST_TYPE request;
+  PRIORITY create_priority;
+  
+  //Stack pointer into the workspace
+  unsigned char *sp;
+  unsigned char workSpace[WORKSPACE]; 
+  voidfuncptr  code;
 } PD;
 
 
@@ -504,29 +509,29 @@ static void Kernel_Create_Task(void (*f)(void), PRIORITY py, int arg) {
 
 
 /**
-  * This internal kernel function is the "main" driving loop of this full-served
-  * model architecture. Basically, on OS_Start(), the kernel repeatedly
-  * requests the next user task's next system call and then invokes the
-  * corresponding kernel function on its behalf.
-  *
-  * This is the main loop of our kernel, called by OS_Start().
+  * This is the kernel which dispatches the initial a_main function and then 
+  * indeffinitely handles Kernel requests. The Kernel also handles context switching
+  * between the task and the kernel
   */
 static void Next_Kernel_Request() {
-  Dispatch();  /* select a new task to run */
+  // Dispatch the main function of the application
+  Dispatch();
 
+  // Continue Handling Kernel Requests
   while(1) {
+    // Once handled clear the Kernel request
+    Cp->request = NONE;
 
-    Cp->request = NONE; /* clear its request */
-
-    /* activate this newly selected task */
+    // Switch context back to the previous/newly selected task from the kernel
     CurrentSp = Cp->sp;
-    Exit_Kernel();    /* or CSwitch() */
+    Exit_Kernel();
 
-    /* if this task makes a system call, it will return to here! */
+    //Tasks making system calls will be enter the kernel here
 
-    /* save the Cp's stack pointer */
+    // save the Cp's stack pointer
     Cp->sp = (unsigned char *) CurrentSp;
 
+    //Based on the Cp's kernel request execute certain cases 
     switch(Cp->request){
       case CREATE:
         Kernel_Create_Task(Cp->code, Cp->create_priority, Cp->create_argument);
@@ -546,10 +551,9 @@ static void Next_Kernel_Request() {
         }
         enter_sleep_queue();
         Dispatch();
-      break;
+        break;
       case NEXT:
       case NONE:
-      /* NONE could be caused by a timer interrupt */
         Cp->state = READY;
         Dispatch();
         break;
@@ -580,7 +584,7 @@ static void Next_Kernel_Request() {
         if(Preemptive_Check()) Dispatch();
         break;
       default:
-        /* Houston! we have a problem here! */
+        /* System Failure if entered */
         break;
     }
   } 
@@ -645,11 +649,10 @@ int Task_GetArg(void){
 };
 
 /**
-* Suspends a task until it's handle is passed to resume
-* Does nothing if the task is already suspended
-*/
+  * Suspends a task until it's ID is passed to resume
+  * Does nothing if the task is already suspended
+  */
 void Task_Suspend( PID p ){
-
   /* if the task to be suspended is currently running, then let the kernel get a new task running */
   if(Cp->id == p && KernelActive) {
       Disable_Interrupt();
@@ -731,12 +734,20 @@ void Task_Sleep(TICK t){
 };
 
 ISR(TIMER1_COMPA_vect){
+  // Initialize linked list pointers
   struct sleep_node *curr_sleep_node = sleep_queue_head;
   struct sleep_node *next_sleep_node = curr_sleep_node->next;
+  
+  // For each node in linked list
   while(curr_sleep_node != NULL){
+
+    // Increment interrupt count
     curr_sleep_node->sleep_actual_count++;
+
+    // Set the next sleep node
     next_sleep_node = curr_sleep_node->next;
 
+    // If interrupt count is >= what is expected resume task and remove from list
     if(curr_sleep_node->sleep_actual_count >= curr_sleep_node->sleep_expected_count){
       Task_Resume(curr_sleep_node->pd->id);
       sleep_delete(curr_sleep_node->pd->id);
@@ -745,6 +756,7 @@ ISR(TIMER1_COMPA_vect){
     curr_sleep_node = next_sleep_node;
   }
 
+  // If nothing left in the list turn off timer interrupts
   if(sleep_queue_head == NULL){
     TIMSK1  = 0;
   }else{
@@ -753,7 +765,6 @@ ISR(TIMER1_COMPA_vect){
 }
 
 void enter_sleep_queue(){
-
   struct sleep_node *new_sleep_node = (struct sleep_node *) malloc(sizeof(struct sleep_node)); 
 
   new_sleep_node->pd = (PD*) Cp;
@@ -771,7 +782,7 @@ void enter_sleep_queue(){
   // start timer
   TIMSK1   |= (1<<OCIE1A);
 
-  //Output compare register, interrupt every 1 millisecond
+  //Output compare register, interrupt every MSPERTICK
   OCR1A   = 625;
 
   // Configure with 256 prescaler
