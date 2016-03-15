@@ -20,38 +20,61 @@ EVENT evt;
 
 void Task_P1(){
     PORTB   = 0x10;
-    _delay_ms(1);
+    _delay_ms(100);
     PORTB   = 0x00;
     
-    Task_Sleep(10); // sleep 100ms
+    Task_Sleep(100); // sleep 1000ms
     
     PORTB   = 0x10;
-    _delay_ms(1);
+    _delay_ms(100);
     PORTB   = 0x00;
     
     Mutex_Lock(mut);
+
+    PORTB   = 0x10;
+    _delay_ms(100);
+    PORTB   = 0x00;
     for(;;);
 }
 
 void Task_P2(){
     PORTB   = 0x20;
-    _delay_ms(1000);
+    _delay_ms(100);
     PORTB   = 0x00;
     
-    Task_Sleep(20); // sleep 200ms
+    Task_Sleep(200); // sleep 2000ms
+
+    PORTB   = 0x20;
+    _delay_ms(100);
+    PORTB   = 0x00;
+
     Event_Signal(evt);
     for(;;);
 }
 
 void Task_P3(){
     PORTB   = 0x40;
-    _delay_ms(1000);
+    _delay_ms(100);
     PORTB   = 0x00;
 
     Mutex_Lock(mut);
     Event_Wait(evt);
+
+    PORTB   = 0x40;
+    _delay_ms(100);
+    PORTB   = 0x00;
+
     Mutex_Unlock(mut);
     for(;;);
+}
+
+void Task_P4(){
+    for(;;) {
+        PORTB   = 0x80;
+    _delay_ms(100);
+    PORTB   = 0x00;
+    _delay_ms(100);
+    }
 }
 
 void a_main(){
@@ -64,4 +87,6 @@ void a_main(){
     Task_Create(Task_P1, 1, 0);
     Task_Create(Task_P2, 2, 0);
     Task_Create(Task_P3, 3, 0);
+    Task_Create(Task_P4, 10, 0);
+
 }

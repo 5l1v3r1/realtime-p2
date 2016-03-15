@@ -8,14 +8,15 @@
 void Task_3(){
   for(;;){
     PORTB = 0x80;
-    _delay_ms(50);
+    _delay_ms(100);
+    PORTB = 0x00;
     Task_Yield();
   }
 }
 
 void Task_2(){
   for(;;){
-    Task_Sleep(1000);
+    Task_Sleep(100);
     PORTB = 0x20;
     _delay_ms(50);
     Task_Yield();
@@ -24,7 +25,7 @@ void Task_2(){
 
 void Task_1(){
   for(;;){
-    Task_Sleep(3000);
+    Task_Sleep(300);
 
     PORTB = 0x40;
     _delay_ms(50);
